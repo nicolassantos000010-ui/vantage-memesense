@@ -1,0 +1,3247 @@
+--[[
+    Vantage Memesense (Rayfield)
+    Abas: Geral | Chams | ESP | Aimbot | Silent Aim | Auto Shoot | Camera | Spin, Anti-Aim e Movimento | Arma | Visuais | Config | Diagnostico
+    Caminhos de dados (confirmados no dump/Cobalt do jogo):
+      Player.Status.TeamValue / Status.Alive / Status.Equipped
+      Player.Armor (escudo)        Player.Agent
+      Player.Primary/Secondary/Knife (StringValue com a arma, se existir)
+      Events.EquipItem (OnClientEvent: player, arma)
+      Events.Shoot:FireServer(parte, posicao, normal, slot, origem, true, muzzle, tick, nil, false)
+      Tag VisionSmoke (smoke)  /  ColorCorrectionEffect "Stun" na Camera (flash)
+    OBS: o jogo tem anti-cheat (AttachGuard). Use conta alt.
+]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CollectionService = game:GetService("CollectionService")
+local Lighting = game:GetService("Lighting")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CoreGui = game:GetService("CoreGui")
+local LP = Players.LocalPlayer
+
+local env = (getgenv and getgenv()) or _G
+if env.VH_Unload then pcall(env.VH_Unload) end
+
+--------------------------------------------------------------------------
+-- Config
+--------------------------------------------------------------------------
+local C = {
+    -- Chams
+    ChamsOn = false, ChamsAllies = false,
+    ChamsFill = Color3.fromRGB(255, 70, 70), ChamsOutline = Color3.fromRGB(255, 255, 255),
+    ChamsAllyColor = Color3.fromRGB(70, 160, 255),
+    ChamsFillT = 0.5, ChamsOutT = 0,
+    ChamsWalls = true, ChamsByVis = false,
+    ChamsVisColor = Color3.fromRGB(80, 255, 120), ChamsHidColor = Color3.fromRGB(255, 70, 70),
+    ChamsMaxDist = 1000,
+
+    -- ESP
+    EspOn = false, EspAllies = false, EspMaxDist = 1000,
+    EspBox = true, EspBoxColor = Color3.fromRGB(255, 70, 70), EspAllyColor = Color3.fromRGB(70, 160, 255),
+    EspBoxThick = 1.5, EspVisColor = false, EspVisColorVis = Color3.fromRGB(80, 255, 120),
+    EspName = true, EspAgent = true, EspSpike = true, EspWeapon = true, EspLoadout = false,
+    EspShield = true, EspHealthText = true, EspDist = true,
+    EspHealthBar = true, EspShieldBar = true, ShieldMax = 50,
+    EspTextSize = 13, EspTextColor = Color3.fromRGB(255, 255, 255),
+    EspTracer = false, EspTracerFrom = "Baixo", EspTracerThick = 1, EspTracerColor = Color3.fromRGB(255, 255, 255),
+
+    -- Aimbot
+    AimOn = false, AimKey = "Botao direito", AimMode = "Segurar",
+    AimMethod = "Mouse", AimPart = "Head", AimFov = 20, AimShowFov = true,
+    AimFovColor = Color3.fromRGB(255, 255, 255), AimFovOrigin = "Centro",
+    AimSmooth = 10, AimMaxStep = 60, AimDead = 1, AimAxisX = 100, AimAxisY = 100,
+    AimJitter = 0, AimPredict = 0,
+    AimTeam = true, AimWall = true, AimMaxDist = 500, AimSort = "Mira",
+    AimLock = false, AimLockBreakWall = true, AimSmokeIgnore = false,
+
+    -- Alvos
+    IncludePlayers = true, IncludeBots = true,
+
+    -- Auto Shoot
+    AsOn = false, AsMode = "Por FOV", AsFov = 5, AsShowFov = true, AsFovColor = Color3.fromRGB(255, 200, 60),
+    AsFovOrigin = "Centro", AsDelay = 80, AsJitter = 0, AsReact = 0,
+    AsPart = "Head", AsTeam = true, AsWall = "So visivel",
+    AsMaxDist = 500, AsSort = "Mira", AsAim360 = true, AsAimSmooth = 3, AsAimTol = 2,
+    AsNeedLock = true, AsRemote = false, AsTime = "Servidor",
+
+    -- Movimento / Camera
+    AutoJump = false, AjKey = "Sempre ativo", AjMethod = "Tecla virtual", AjOnlyMoving = false, AjInterval = 0,
+    TpOn = false, TpDist = 6, TpX = 0, TpY = 0, TpCollide = true, TpBody = true, TpHideArms = true,
+    FovOn = false, FovVal = 90,
+
+    -- Spin Bot
+    SpinOn = false, SpinSpeed = 720, SpinDir = "Horario", SpinFlip = 1, SpinVar = 0,
+    SpinWhen = "Sempre", SpinPauseShoot = true, SpinPitchSpeed = 0, SpinRollSpeed = 0,
+
+    -- Anti-Aim
+    AaOn = false, AaMode = "Estatico", AaBase = "Atras", AaYaw = 0, AaRange = 60, AaRate = 10, AaSweep = 1,
+    AaFollowCam = true, AaPitch = "Nenhum", AaPitchAmt = 30, AaRoll = 0, AaWhen = "Sempre", AaPauseShoot = true,
+
+    -- Arma
+    NoRecoil = false, NoSpread = false, FireRateOn = false, FireRateMul = 1.5,
+
+    -- Movimento (velocidade)
+    SpeedOn = false, SpeedVal = 20,
+
+    -- Silent Aim (troca o alvo do tiro do proprio jogo)
+    SilentOn = false, SilentMethod = "Auto", SilentFov = 15, SilentShowFov = true,
+    SilentFovColor = Color3.fromRGB(255, 90, 90), SilentFovOrigin = "Centro", SilentPart = "Head",
+    SilentWall = "So visivel", SilentTeam = true, SilentMaxDist = 500, SilentSort = "Mira", SilentHitChance = 100,
+
+    -- Auto agachar
+    AcOn = false, AcMode = "Sempre agachado", AcKey = "LeftControl", AcInterval = 400,
+
+    -- Idioma
+    Lang = "Portugues",
+
+    -- Visuais
+    NoSmoke = false, NoSmokeWalls = false, NoFlash = false, NoBlur = false, NoColor = false,
+}
+
+--------------------------------------------------------------------------
+-- Utilidades
+--------------------------------------------------------------------------
+local Conns = {}
+local function conn(sig, fn)
+    local c = sig:Connect(fn)
+    Conns[#Conns + 1] = c
+    return c
+end
+
+-- Fila de tarefas: os callbacks do Rayfield so registram o que fazer; a thread principal (Heartbeat
+-- conectado por este script) executa. Alguns executores rodam callbacks de UI sem capability de Instance.
+local JOBS = {}
+local function post(fn) JOBS[#JOBS + 1] = fn end
+conn(RunService.Heartbeat, function()
+    if #JOBS == 0 then return end
+    local list = JOBS
+    JOBS = {}
+    for _, fn in ipairs(list) do pcall(fn) end
+end)
+
+local function cam() return workspace.CurrentCamera end
+local function viewport()
+    local c = cam()
+    if c then return c.ViewportSize end
+    return Vector2.new(1920, 1080)
+end
+
+local function childVal(parent, name)
+    if not parent then return nil end
+    local c = parent:FindFirstChild(name)
+    if not c then return nil end
+    local ok, v = pcall(function() return c.Value end)
+    if ok then return v end
+    return nil
+end
+
+local function hex(c)
+    return string.format("#%02x%02x%02x", math.floor(c.R * 255 + 0.5), math.floor(c.G * 255 + 0.5), math.floor(c.B * 255 + 0.5))
+end
+
+local function pick(o)
+    if type(o) == "table" then return o[1] end
+    return o
+end
+
+local STUDS_PER_METER = 3.642806
+
+local function guiParent()
+    local ok, h = pcall(function() return gethui and gethui() end)
+    if ok and h then return h end
+    return CoreGui
+end
+
+--------------------------------------------------------------------------
+-- Dados do jogo
+--------------------------------------------------------------------------
+local equipCache = {}
+
+local function isBotEnt(p) return type(p) == "table" end
+
+local BOTS = {}   -- [Model] = entidade (bots do jogo: Workspace.DeathmatchBots)
+
+local function teamOf(p)
+    if isBotEnt(p) then return p.Model:GetAttribute("Team") end
+    return childVal(p:FindFirstChild("Status"), "TeamValue")
+end
+local function aliveOf(p)
+    if isBotEnt(p) then return true end
+    local v = childVal(p:FindFirstChild("Status"), "Alive")
+    if v == nil then return true end
+    return v
+end
+
+local function isEnemy(p)
+    local a, b = teamOf(LP), teamOf(p)
+    if a == nil or b == nil or a == "" or b == "" then return true end
+    return tostring(a):lower() ~= tostring(b):lower()
+end
+
+local function weaponOf(p)
+    if isBotEnt(p) then
+        local w = p.Model:GetAttribute("Weapon") or p.Model:GetAttribute("Equipped")
+        if type(w) == "string" and w ~= "" then return w end
+        return "?"
+    end
+    local slot = childVal(p:FindFirstChild("Status"), "Equipped")
+    local fromSlot
+    if type(slot) == "string" and slot ~= "" then
+        local v = childVal(p, slot)
+        if type(v) == "string" and v ~= "" then fromSlot = v end
+    end
+    return fromSlot or equipCache[p] or (type(slot) == "string" and slot ~= "" and slot) or "?"
+end
+
+local function loadoutOf(p)
+    if isBotEnt(p) then return weaponOf(p) end
+    local out = {}
+    for _, s in ipairs({ "Primary", "Secondary", "Knife" }) do
+        local v = childVal(p, s)
+        if type(v) == "string" and v ~= "" then out[#out + 1] = v end
+    end
+    if #out == 0 then return "?" end
+    return table.concat(out, " | ")
+end
+
+local function shieldOf(p, char)
+    if isBotEnt(p) then
+        local a = p.Model:GetAttribute("Armor")
+        return type(a) == "number" and a or 0
+    end
+    local v = childVal(p, "Armor")
+    if type(v) ~= "number" then v = childVal(char, "Armor") end
+    if type(v) ~= "number" then v = 0 end
+    return v
+end
+
+local function agentOf(p)
+    if isBotEnt(p) then
+        local a = p.Model:GetAttribute("Agent")
+        return type(a) == "string" and a or ""
+    end
+    local v = childVal(p, "Agent")
+    if type(v) ~= "string" or v == "" then v = childVal(p:FindFirstChild("Status"), "Agent") end
+    if type(v) ~= "string" or v == "" then v = p:GetAttribute("Agent") end
+    if type(v) == "string" then return v end
+    return ""
+end
+
+-- Retorna char, root, hum se o jogador/bot estiver vivo e valido
+local function liveParts(p)
+    local char = p.Character
+    if not char then return nil end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not hum or not root or hum.Health <= 0 then return nil end
+    if not aliveOf(p) then return nil end
+    return char, root, hum
+end
+
+-- lista de alvos possiveis: jogadores (menos voce) e/ou bots
+local function entities()
+    local out = {}
+    if C.IncludePlayers then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LP then out[#out + 1] = p end
+        end
+    end
+    if C.IncludeBots then
+        for _, e in pairs(BOTS) do out[#out + 1] = e end
+    end
+    return out
+end
+local function entAllowed(p)
+    if isBotEnt(p) then return C.IncludeBots end
+    return C.IncludePlayers
+end
+
+--------------------------------------------------------------------------
+-- Visibilidade (wall check)
+--------------------------------------------------------------------------
+local rayParams = RaycastParams.new()
+rayParams.FilterType = Enum.RaycastFilterType.Exclude
+rayParams.IgnoreWater = true
+local ignoreCache = { [false] = { t = 0, list = {} }, [true] = { t = 0, list = {} } }
+
+local function rebuildIgnore(withSmoke)
+    local list = {}
+    if LP.Character then list[#list + 1] = LP.Character end
+    local c = cam()
+    if c then list[#list + 1] = c end
+    local geo = workspace:FindFirstChild("Geometry")
+    if geo then
+        for _, n in ipairs({ "Debris", "Ray_Ignore", "DroppedItems", "Projectiles" }) do
+            local f = geo:FindFirstChild(n)
+            if f then list[#list + 1] = f end
+        end
+    end
+    if withSmoke then
+        for _, t in ipairs(CollectionService:GetTagged("VisionSmoke")) do list[#list + 1] = t end
+    end
+    return list
+end
+
+local function isVisible(origin, part, char, withSmoke)
+    local now = os.clock()
+    local entry = ignoreCache[withSmoke and true or false]
+    if now - entry.t > 0.5 then
+        entry.list = rebuildIgnore(withSmoke)
+        entry.t = now
+    end
+    local ign = {}
+    for i = 1, #entry.list do ign[i] = entry.list[i] end
+    local dir = part.Position - origin
+    local mag = dir.Magnitude
+    if mag < 0.1 then return true end
+    dir = dir.Unit * (mag + 1)
+    for _ = 1, 6 do
+        rayParams.FilterDescendantsInstances = ign
+        local res = workspace:Raycast(origin, dir, rayParams)
+        if not res then return true end
+        local inst = res.Instance
+        if inst:IsDescendantOf(char) then return true end
+        local m = inst:FindFirstAncestorOfClass("Model")
+        if m and m ~= workspace and m:FindFirstChildOfClass("Humanoid") then
+            ign[#ign + 1] = m
+        elseif inst.Transparency >= 0.99 and not inst.CanCollide then
+            ign[#ign + 1] = inst
+        else
+            return false
+        end
+    end
+    return false
+end
+
+--------------------------------------------------------------------------
+-- Selecao de alvo (compartilhada por Aimbot)
+--------------------------------------------------------------------------
+local function fovPx(deg)
+    local c = cam()
+    if not c then return 0 end
+    if deg >= 175 then return 100000 end
+    local vf = math.rad(c.FieldOfView)
+    return math.tan(math.rad(deg) / 2) / math.tan(vf / 2) * (viewport().Y / 2)
+end
+
+local function aimOrigin(mode)
+    if mode == "Mouse" then return UserInputService:GetMouseLocation() end
+    return viewport() / 2
+end
+
+local function candidateParts(char, which, hitbox)
+    local list = {}
+    local function add(names)
+        for _, n in ipairs(names) do
+            local x = char:FindFirstChild(n)
+            if x and x:IsA("BasePart") then list[#list + 1] = x return end
+        end
+    end
+    local headN = hitbox and { "HeadHB", "Head" } or { "Head" }
+    local bodyN = hitbox and { "HumanoidRootPart", "UpperTorso", "Torso" } or { "UpperTorso", "Torso", "HumanoidRootPart" }
+    if which == "Head" then
+        add(headN)
+    elseif which == "Torso" then
+        add(bodyN)
+    else
+        add(headN)
+        add(bodyN)
+    end
+    return list
+end
+
+--------------------------------------------------------------------------
+-- Config da arma atual (GunConfig do jogo)
+--------------------------------------------------------------------------
+local GCraw
+local function gunCfg()
+    if GCraw == nil then
+        GCraw = false
+        local m = ReplicatedStorage:FindFirstChild("Modules")
+        m = m and m:FindFirstChild("GunConfig")
+        if m then
+            local ok, r = pcall(require, m)
+            if ok and type(r) == "table" then GCraw = r end
+        end
+    end
+    if not GCraw then return nil end
+    local ok, cfg = pcall(GCraw.Get, weaponOf(LP))
+    if ok and type(cfg) == "table" then return cfg end
+    return nil
+end
+
+-- o = {fov, all(360), part, hitbox, team(bool = so inimigos), wall, maxDist, sort, origin, smokeIgnore}
+local function pickTarget(o, onlyPlayer)
+    local c = cam()
+    if not c then return nil end
+    local origin2d = aimOrigin(o.origin)
+    local radius = fovPx(o.fov)
+    local camPos = c.CFrame.Position
+    local best, bestScore
+    for _, p in ipairs(entities()) do
+        if (not onlyPlayer or p == onlyPlayer) then
+            local char, root, hum = liveParts(p)
+            if char and ((not o.team) or isEnemy(p)) then
+                local dist = (root.Position - camPos).Magnitude / STUDS_PER_METER
+                if dist <= o.maxDist then
+                    local cands = candidateParts(char, o.part, o.hitbox)
+                    for _, part in ipairs(cands) do
+                        local sp, on = c:WorldToViewportPoint(part.Position)
+                        if sp.Z > 0 or o.all then
+                            local d2 = (Vector2.new(sp.X, sp.Y) - origin2d).Magnitude
+                            if sp.Z <= 0 then d2 = 0 end
+                            if d2 <= radius or onlyPlayer or o.all then
+                                local ok = true
+                                if o.wall then ok = isVisible(camPos, part, char, o.smokeIgnore) end
+                                if ok then
+                                    local score = d2
+                                    if o.sort == "Distancia" then score = dist
+                                    elseif o.sort == "Vida" then score = hum.Health end
+                                    if not bestScore or score < bestScore then
+                                        bestScore = score
+                                        best = { player = p, part = part, screen = Vector2.new(sp.X, sp.Y), list = cands, char = char, hum = hum }
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return best
+end
+
+local aimOpts = {}
+local function refreshAimOpts()
+    aimOpts = {
+        fov = C.AimFov, part = C.AimPart, hitbox = false, team = C.AimTeam, wall = C.AimWall,
+        maxDist = C.AimMaxDist, sort = C.AimSort, origin = C.AimFovOrigin, smokeIgnore = C.AimSmokeIgnore,
+    }
+end
+refreshAimOpts()
+
+--------------------------------------------------------------------------
+-- Overlay (ESP, FOV, tracers) - tudo em Instances, sem Drawing
+--------------------------------------------------------------------------
+local GP = guiParent()
+local Overlay = Instance.new("ScreenGui")
+Overlay.Name = "VH_Overlay"
+Overlay.IgnoreGuiInset = true
+Overlay.ResetOnSpawn = false
+Overlay.DisplayOrder = 999
+Overlay.Parent = GP
+
+local Holder = Instance.new("Folder")
+Holder.Name = "VH_Holder"
+Holder.Parent = GP
+
+local function makeCircle(color)
+    local f = Instance.new("Frame")
+    f.BackgroundTransparency = 1
+    f.AnchorPoint = Vector2.new(0.5, 0.5)
+    f.Visible = false
+    f.BorderSizePixel = 0
+    local cr = Instance.new("UICorner")
+    cr.CornerRadius = UDim.new(1, 0)
+    cr.Parent = f
+    local st = Instance.new("UIStroke")
+    st.Thickness = 1.5
+    st.Color = color
+    st.Parent = f
+    f.Parent = Overlay
+    return f, st
+end
+local aimCircle, aimStroke = makeCircle(C.AimFovColor)
+local asCircle, asStroke = makeCircle(C.AsFovColor)
+local silCircle, silStroke = makeCircle(C.SilentFovColor)
+
+local ESP = {}
+local ESPERR = nil
+
+local function newESP(p)
+    local o = { p = p }
+
+    o.hl = Instance.new("Highlight")
+    o.hl.Name = "VH_hl"
+    o.hl.Enabled = false
+    o.hl.Parent = Holder
+
+    o.box = Instance.new("BillboardGui")
+    o.box.Name = "VH_box"
+    o.box.AlwaysOnTop = true
+    o.box.LightInfluence = 0
+    o.box.ResetOnSpawn = false
+    o.box.Size = UDim2.new(4, 0, 6, 0)
+    o.box.Enabled = false
+    o.box.Parent = Holder
+
+    o.boxFrame = Instance.new("Frame")
+    o.boxFrame.BackgroundTransparency = 1
+    o.boxFrame.BorderSizePixel = 0
+    o.boxFrame.Size = UDim2.new(1, 0, 1, 0)
+    o.boxFrame.Parent = o.box
+    o.boxStroke = Instance.new("UIStroke")
+    o.boxStroke.Thickness = 1.5
+    o.boxStroke.Parent = o.boxFrame
+
+    o.hpBg = Instance.new("Frame")
+    o.hpBg.BackgroundColor3 = Color3.new(0, 0, 0)
+    o.hpBg.BackgroundTransparency = 0.4
+    o.hpBg.BorderSizePixel = 0
+    o.hpBg.AnchorPoint = Vector2.new(1, 0)
+    o.hpBg.Position = UDim2.new(0, -3, 0, 0)
+    o.hpBg.Size = UDim2.new(0, 3, 1, 0)
+    o.hpBg.Parent = o.boxFrame
+    o.hpFill = Instance.new("Frame")
+    o.hpFill.BorderSizePixel = 0
+    o.hpFill.AnchorPoint = Vector2.new(0, 1)
+    o.hpFill.Position = UDim2.new(0, 0, 1, 0)
+    o.hpFill.Size = UDim2.new(1, 0, 1, 0)
+    o.hpFill.Parent = o.hpBg
+
+    o.shBg = Instance.new("Frame")
+    o.shBg.BackgroundColor3 = Color3.new(0, 0, 0)
+    o.shBg.BackgroundTransparency = 0.4
+    o.shBg.BorderSizePixel = 0
+    o.shBg.Position = UDim2.new(1, 3, 0, 0)
+    o.shBg.Size = UDim2.new(0, 3, 1, 0)
+    o.shBg.Parent = o.boxFrame
+    o.shFill = Instance.new("Frame")
+    o.shFill.BorderSizePixel = 0
+    o.shFill.BackgroundColor3 = Color3.fromRGB(70, 160, 255)
+    o.shFill.AnchorPoint = Vector2.new(0, 1)
+    o.shFill.Position = UDim2.new(0, 0, 1, 0)
+    o.shFill.Size = UDim2.new(1, 0, 0, 0)
+    o.shFill.Parent = o.shBg
+
+    -- textos ficam dentro do billboard da caixa, fora dos limites (offset em pixels)
+    local function textLabel(anchor, pos, h, yAlign)
+        local t = Instance.new("TextLabel")
+        t.BackgroundTransparency = 1
+        t.AnchorPoint = anchor
+        t.Position = pos
+        t.Size = UDim2.new(0, 260, 0, h)
+        t.RichText = true
+        t.Font = Enum.Font.GothamBold
+        t.TextSize = 13
+        t.TextColor3 = Color3.new(1, 1, 1)
+        t.TextStrokeTransparency = 0.3
+        t.TextYAlignment = yAlign
+        t.Text = ""
+        t.Visible = false
+        t.ZIndex = 5
+        t.Parent = Overlay
+        return t
+    end
+    o.topText = textLabel(Vector2.new(0.5, 1), UDim2.new(0, 0, 0, 0), 40, Enum.TextYAlignment.Bottom)
+    o.botText = textLabel(Vector2.new(0.5, 0), UDim2.new(0, 0, 0, 0), 90, Enum.TextYAlignment.Top)
+
+    o.tracer = Instance.new("Frame")
+    o.tracer.BorderSizePixel = 0
+    o.tracer.AnchorPoint = Vector2.new(0.5, 0.5)
+    o.tracer.Visible = false
+    o.tracer.Parent = Overlay
+
+    o.vis = false
+    o.visStamp = 0
+    o.textStamp = 0
+    ESP[p] = o
+    return o
+end
+
+local function hideESP(o)
+    o.hl.Enabled = false
+    o.box.Enabled = false
+    o.tracer.Visible = false
+    o.topText.Visible = false
+    o.botText.Visible = false
+end
+
+local function destroyESP(p)
+    local o = ESP[p]
+    if not o then return end
+    for _, k in ipairs({ "hl", "box", "tracer", "topText", "botText" }) do
+        pcall(function() o[k]:Destroy() end)
+    end
+    ESP[p] = nil
+end
+
+local function updateESP(o, now)
+    local p = o.p
+    local char, root, hum = liveParts(p)
+    local c = cam()
+    if not char or not c or not entAllowed(p) then hideESP(o) return end
+
+    local enemy = isEnemy(p)
+    local wantChams = C.ChamsOn and (enemy or C.ChamsAllies)
+    local wantEsp = C.EspOn and (enemy or C.EspAllies)
+    if not wantChams and not wantEsp then hideESP(o) return end
+
+    local camPos = c.CFrame.Position
+    local dist = (root.Position - camPos).Magnitude / STUDS_PER_METER
+
+    if o.char ~= char then
+        o.char = char
+        o.hl.Adornee = char
+        o.box.Adornee = root
+    end
+
+    -- visibilidade (15 Hz)
+    local needVis = (wantChams and C.ChamsByVis) or (wantEsp and C.EspVisColor)
+    if needVis and now - o.visStamp > 0.07 then
+        o.visStamp = now
+        local head = char:FindFirstChild("Head") or root
+        o.vis = isVisible(camPos, head, char, false)
+    end
+
+    -- Chams
+    if wantChams and dist <= C.ChamsMaxDist then
+        local fill = enemy and C.ChamsFill or C.ChamsAllyColor
+        if C.ChamsByVis then fill = o.vis and C.ChamsVisColor or C.ChamsHidColor end
+        o.hl.FillColor = fill
+        o.hl.OutlineColor = C.ChamsOutline
+        o.hl.FillTransparency = C.ChamsFillT
+        o.hl.OutlineTransparency = C.ChamsOutT
+        o.hl.DepthMode = C.ChamsWalls and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
+        o.hl.Enabled = true
+    else
+        o.hl.Enabled = false
+    end
+
+    -- ESP
+    if wantEsp and dist <= C.EspMaxDist then
+        local col = enemy and C.EspBoxColor or C.EspAllyColor
+        if C.EspVisColor and o.vis then col = C.EspVisColorVis end
+
+        o.box.Enabled = true
+        o.boxStroke.Enabled = C.EspBox
+        o.boxStroke.Color = col
+        o.boxStroke.Thickness = C.EspBoxThick
+        local hpFrac = math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1)
+        o.hpBg.Visible = C.EspHealthBar
+        o.hpFill.Size = UDim2.new(1, 0, hpFrac, 0)
+        o.hpFill.BackgroundColor3 = Color3.fromHSV(hpFrac * 0.33, 1, 1)
+        local shield = shieldOf(p, char)
+        o.shBg.Visible = C.EspShieldBar and shield > 0
+        o.shFill.Size = UDim2.new(1, 0, math.clamp(shield / math.max(C.ShieldMax, 1), 0, 1), 0)
+
+        if now - o.textStamp > 0.1 then
+            o.textStamp = now
+            local okT, errT = pcall(function()
+            local top, bot = {}, {}
+            if C.EspName then
+                local s = tostring((p.DisplayName ~= nil and p.DisplayName ~= "") and p.DisplayName or p.Name or "?")
+                top[#top + 1] = string.format('<font color="%s">%s</font>', hex(col), s)
+            end
+            if C.EspAgent then
+                local a = agentOf(p)
+                if a ~= "" then top[#top + 1] = "[" .. a .. "]" end
+            end
+            if C.EspSpike then
+                local hs
+                if isBotEnt(p) then hs = p.Model:GetAttribute("HasSpike")
+                else hs = p:GetAttribute("HasSpike") or childVal(p, "HasSpike") end
+                if hs == true then top[#top + 1] = '<font color="#ffd23c">[SPIKE]</font>' end
+            end
+            if C.EspWeapon then
+                local w = weaponOf(p)
+                if not (isBotEnt(p) and w == "?") then bot[#bot + 1] = w end
+            end
+            if C.EspLoadout then
+                local w = loadoutOf(p)
+                if not (isBotEnt(p) and w == "?") then bot[#bot + 1] = w end
+            end
+            if C.EspShield then
+                if shield > 0 then
+                    bot[#bot + 1] = string.format('<font color="#59a6ff">Escudo: sim (%d)</font>', shield)
+                else
+                    bot[#bot + 1] = '<font color="#aaaaaa">Escudo: nao</font>'
+                end
+            end
+            local line = {}
+            if C.EspHealthText then line[#line + 1] = string.format("HP %d", math.floor(hum.Health + 0.5)) end
+            if C.EspDist then line[#line + 1] = string.format("%dm", math.floor(dist + 0.5)) end
+            if #line > 0 then bot[#bot + 1] = table.concat(line, "  ") end
+            o.topText.Text = table.concat(top, " ")
+            o.botText.Text = table.concat(bot, "\n")
+            o.topText.TextSize = C.EspTextSize
+            o.botText.TextSize = C.EspTextSize
+            o.topText.TextColor3 = C.EspTextColor
+            o.botText.TextColor3 = C.EspTextColor
+            end)
+            ESPERR = okT and nil or tostring(errT)
+        end
+        -- posicao na tela (labels ficam no Overlay, nao no billboard)
+        local rp = root.Position
+        local tp = c:WorldToViewportPoint(rp + Vector3.new(0, 3.4, 0))
+        local bp = c:WorldToViewportPoint(rp - Vector3.new(0, 3.4, 0))
+        local onScreen = tp.Z > 0 and bp.Z > 0
+        o.topText.Position = UDim2.fromOffset(tp.X, tp.Y - 2)
+        o.botText.Position = UDim2.fromOffset(bp.X, bp.Y + 2)
+        o.topText.Visible = onScreen and (C.EspName or C.EspAgent or C.EspSpike) and o.topText.Text ~= ""
+        o.botText.Visible = onScreen and (C.EspWeapon or C.EspLoadout or C.EspShield or C.EspHealthText or C.EspDist) and o.botText.Text ~= ""
+
+        -- tracer
+        if C.EspTracer then
+            local sp = c:WorldToViewportPoint(root.Position)
+            if sp.Z > 0 then
+                local vp = viewport()
+                local from
+                if C.EspTracerFrom == "Centro" then from = vp / 2
+                elseif C.EspTracerFrom == "Cima" then from = Vector2.new(vp.X / 2, 0)
+                else from = Vector2.new(vp.X / 2, vp.Y) end
+                local to = Vector2.new(sp.X, sp.Y)
+                local d = to - from
+                o.tracer.Size = UDim2.fromOffset(d.Magnitude, C.EspTracerThick)
+                o.tracer.Position = UDim2.fromOffset((from.X + to.X) / 2, (from.Y + to.Y) / 2)
+                o.tracer.Rotation = math.deg(math.atan2(d.Y, d.X))
+                o.tracer.BackgroundColor3 = C.EspTracerColor
+                o.tracer.Visible = true
+            else
+                o.tracer.Visible = false
+            end
+        else
+            o.tracer.Visible = false
+        end
+    else
+        o.box.Enabled = false
+        o.tracer.Visible = false
+        o.topText.Visible = false
+        o.botText.Visible = false
+    end
+end
+
+local function addPlayer(p)
+    if p ~= LP and not ESP[p] then newESP(p) end
+end
+for _, p in ipairs(Players:GetPlayers()) do addPlayer(p) end
+conn(Players.PlayerAdded, addPlayer)
+conn(Players.PlayerRemoving, function(p)
+    destroyESP(p)
+    equipCache[p] = nil
+end)
+
+-- bots do jogo (Workspace.DeathmatchBots: Model com Humanoid e atributos Team/Armor/Agent/BotName/HasSpike)
+local function isBotModel(m)
+    if not m:IsA("Model") then return false end
+    if m:GetAttribute("BotId") == nil and m:GetAttribute("BotName") == nil then return false end
+    return m:FindFirstChildOfClass("Humanoid") ~= nil
+end
+local function scanBots()
+    local seen = {}
+    local function consider(m)
+        if isBotModel(m) then
+            seen[m] = true
+            if not BOTS[m] then
+                local ent = { IsBot = true, Model = m, Character = m, DisplayName = "",
+                    Name = tostring(m:GetAttribute("BotName") or m.Name) }
+                BOTS[m] = ent
+                newESP(ent)
+            end
+        end
+    end
+    local folder = workspace:FindFirstChild("DeathmatchBots")
+    if folder then
+        for _, m in ipairs(folder:GetChildren()) do consider(m) end
+    else
+        -- nome da pasta pode variar: procura 1 nivel dentro do Workspace
+        for _, f in ipairs(workspace:GetChildren()) do
+            if f:IsA("Model") then consider(f)
+            elseif f:IsA("Folder") then
+                for _, m in ipairs(f:GetChildren()) do consider(m) end
+            end
+        end
+    end
+    for m, ent in pairs(BOTS) do
+        if not seen[m] or not m.Parent then
+            destroyESP(ent)
+            BOTS[m] = nil
+        end
+    end
+end
+task.spawn(function()
+    while not C.Dead do
+        pcall(scanBots)
+        task.wait(1)
+    end
+end)
+
+-- arma equipada dos outros (evento do servidor, so leitura)
+task.spawn(function()
+    pcall(function()
+        local eq
+        for _ = 1, 20 do
+            for _, d in ipairs(ReplicatedStorage:GetDescendants()) do
+                if d.Name == "EquipItem" and d:IsA("RemoteEvent") then eq = d break end
+            end
+            if eq then break end
+            task.wait(0.5)
+        end
+        if eq then
+            conn(eq.OnClientEvent, function(plr, name)
+                if typeof(plr) == "Instance" and type(name) == "string" then equipCache[plr] = name end
+            end)
+        end
+    end)
+end)
+
+--------------------------------------------------------------------------
+-- Entrada (tecla do aimbot)
+--------------------------------------------------------------------------
+local KEYMAP = {
+    ["Botao direito"] = Enum.UserInputType.MouseButton2,
+    ["Botao esquerdo"] = Enum.UserInputType.MouseButton1,
+    ["Botao do meio"] = Enum.UserInputType.MouseButton3,
+    ["Alt esquerdo"] = Enum.KeyCode.LeftAlt,
+    ["Shift esquerdo"] = Enum.KeyCode.LeftShift,
+    ["Ctrl esquerdo"] = Enum.KeyCode.LeftControl,
+    ["F"] = Enum.KeyCode.F, ["G"] = Enum.KeyCode.G, ["V"] = Enum.KeyCode.V,
+    ["Z"] = Enum.KeyCode.Z, ["T"] = Enum.KeyCode.T, ["Y"] = Enum.KeyCode.Y,
+}
+local KEYNAMES = { "Sempre ativo", "Botao direito", "Botao esquerdo", "Botao do meio", "Alt esquerdo",
+    "Shift esquerdo", "Ctrl esquerdo", "F", "G", "V", "Z", "T", "Y" }
+
+local function inputIs(input, name)
+    local k = KEYMAP[name]
+    if not k then return false end
+    if k.EnumType == Enum.UserInputType then return input.UserInputType == k end
+    return input.KeyCode == k
+end
+
+local aimHeld = false
+local locked = nil
+
+conn(UserInputService.InputBegan, function(input, gp)
+    if not inputIs(input, C.AimKey) then return end
+    if gp and input.UserInputType == Enum.UserInputType.Keyboard then return end
+    if C.AimMode == "Alternar" then
+        aimHeld = not aimHeld
+        if not aimHeld then locked = nil end
+    else
+        aimHeld = true
+    end
+end)
+conn(UserInputService.InputEnded, function(input)
+    if C.AimMode ~= "Alternar" and inputIs(input, C.AimKey) then
+        aimHeld = false
+        locked = nil
+    end
+end)
+
+--------------------------------------------------------------------------
+-- Aimbot
+--------------------------------------------------------------------------
+local function smoothK(s)
+    return 1 / (1 + math.max(s, 0) * 0.2)
+end
+
+local function rnd(x)
+    if x > 0 then return math.max(1, math.floor(x + 0.5)) end
+    if x < 0 then return math.min(-1, math.ceil(x - 0.5)) end
+    return 0
+end
+
+local function applyAim(part)
+    local c = cam()
+    if not c then return end
+    local pos = part.Position
+    if C.AimPredict > 0 then pos = pos + part.AssemblyLinearVelocity * C.AimPredict end
+    local k = smoothK(C.AimSmooth)
+    if C.AimMethod == "Camera" or not mousemoverel then
+        c.CFrame = c.CFrame:Lerp(CFrame.lookAt(c.CFrame.Position, pos), k)
+        return
+    end
+    if not mousemoverel then return end
+    local sp = c:WorldToViewportPoint(pos)
+    if sp.Z <= 0 then return end
+    local d = Vector2.new(sp.X, sp.Y) - aimOrigin(C.AimFovOrigin)
+    if d.Magnitude <= C.AimDead then return end
+    local dx, dy = d.X * k * (C.AimAxisX / 100), d.Y * k * (C.AimAxisY / 100)
+    if C.AimJitter > 0 then
+        dx = dx + (math.random() - 0.5) * 2 * C.AimJitter
+        dy = dy + (math.random() - 0.5) * 2 * C.AimJitter
+    end
+    local m = math.sqrt(dx * dx + dy * dy)
+    if m > C.AimMaxStep and m > 0 then
+        dx, dy = dx / m * C.AimMaxStep, dy / m * C.AimMaxStep
+    end
+    mousemoverel(rnd(dx), rnd(dy))
+end
+
+local function aimStep()
+    if not C.AimOn then locked = nil return end
+    if not (aimHeld or C.AimKey == "Sempre ativo") then locked = nil return end
+
+    local tgt
+    if C.AimLock and locked then
+        local char = liveParts(locked)
+        if char and ((not C.AimTeam) or isEnemy(locked)) then
+            local info = pickTarget({
+                fov = 179, part = C.AimPart, hitbox = false, team = C.AimTeam,
+                wall = C.AimWall and C.AimLockBreakWall, maxDist = C.AimMaxDist,
+                sort = C.AimSort, origin = C.AimFovOrigin, smokeIgnore = C.AimSmokeIgnore,
+            }, locked)
+            if info then tgt = info else locked = nil end
+        else
+            locked = nil
+        end
+    end
+    if not tgt then
+        tgt = pickTarget(aimOpts)
+        if tgt and C.AimLock then locked = tgt.player end
+    end
+    if not tgt then return end
+
+    local part = tgt.part
+    if C.AimPart == "Mais proxima" then
+        -- escolhe a parte mais perto da mira
+        local c = cam()
+        local origin = aimOrigin(C.AimFovOrigin)
+        local bestD
+        for _, pt in ipairs(tgt.list) do
+            local sp = c:WorldToViewportPoint(pt.Position)
+            local d = (Vector2.new(sp.X, sp.Y) - origin).Magnitude
+            if not bestD or d < bestD then bestD = d part = pt end
+        end
+    end
+    applyAim(part)
+end
+
+--------------------------------------------------------------------------
+-- Auto Shoot (modo FOV / modo 360) - clique simulado ou remote Events.Shoot
+--------------------------------------------------------------------------
+local AS = { cur = nil, last = 0, since = nil, shots = 0, sent = 0, clickFn = "nenhum", state = "desligado", nextDelay = 0, remoteErr = "" }
+
+local function doClick()
+    if mouse1click then
+        pcall(mouse1click)
+        AS.clickFn = "mouse1click"
+        return true
+    end
+    if mouse1press and mouse1release then
+        pcall(mouse1press)
+        task.delay(0.03, function() pcall(mouse1release) end)
+        AS.clickFn = "mouse1press/release"
+        return true
+    end
+    local ok = pcall(function()
+        local vim = game:GetService("VirtualInputManager")
+        local p = UserInputService:GetMouseLocation()
+        vim:SendMouseButtonEvent(p.X, p.Y, 0, true, game, 0)
+        vim:SendMouseButtonEvent(p.X, p.Y, 0, false, game, 0)
+    end)
+    AS.clickFn = "VirtualInputManager"
+    return ok
+end
+
+-- ---- modo remote (Events.Shoot) ----
+local ShootRemote
+local function findShoot()
+    if ShootRemote and ShootRemote.Parent then return ShootRemote end
+    local r
+    local ev = ReplicatedStorage:FindFirstChild("Events")
+    local x = ev and ev:FindFirstChild("Shoot")
+    if x and x:IsA("RemoteEvent") then r = x end
+    if not r then
+        for _, d in ipairs(ReplicatedStorage:GetDescendants()) do
+            if d.Name == "Shoot" and d:IsA("RemoteEvent") then r = d break end
+        end
+    end
+    ShootRemote = r
+    return r
+end
+
+local hitParams = RaycastParams.new()
+hitParams.FilterType = Enum.RaycastFilterType.Include
+hitParams.IgnoreWater = true
+
+-- ponto de acerto na superficie da parte (posicao + normal), como o jogo reporta
+local function surfaceHit(origin, part)
+    local dir = part.Position - origin
+    local mag = dir.Magnitude
+    if mag < 0.05 then return part.Position, Vector3.new(0, 1, 0) end
+    hitParams.FilterDescendantsInstances = { part }
+    local ok, res = pcall(function()
+        return workspace:Raycast(origin, dir.Unit * (mag + 6), hitParams)
+    end)
+    if ok and res and res.Instance == part then return res.Position, res.Normal end
+    local back = -dir.Unit
+    local r = (part.Size.X + part.Size.Y + part.Size.Z) / 6
+    return part.Position + back * r, back
+end
+
+local function slotNow()
+    local v = childVal(LP:FindFirstChild("Status"), "Equipped")
+    if v == "Primary" or v == "Secondary" or v == "Knife" then return v end
+    return "Primary"
+end
+
+local function ammoLeft()
+    local inv = LP:FindFirstChild("Inventory")
+    local item = inv and inv:FindFirstChild(weaponOf(LP))
+    local a = item and childVal(item, "Ammo")
+    if type(a) == "number" then return a end
+    return nil
+end
+
+local function fireInterval()
+    local cfg = gunCfg()
+    if cfg and type(cfg.Rate) == "number" and cfg.Rate > 0 then return 1 / cfg.Rate end
+    return 0.1
+end
+
+local function fireRemote(tgt)
+    local r = findShoot()
+    if not r then return false, "Events.Shoot nao encontrado" end
+    local c = cam()
+    if not c then return false, "sem camera" end
+    local ammo = ammoLeft()
+    if ammo and ammo <= 0 then return false, "sem municao" end
+    local part = tgt.part
+    if not part or not part.Parent then return false, "alvo invalido" end
+    local origin = c.CFrame.Position
+    local pos, normal = surfaceHit(origin, part)
+    local muzzle = origin + c.CFrame.LookVector
+    local ts = (C.AsTime == "tick()") and tick() or workspace:GetServerTimeNow()
+    local ok, err = pcall(function()
+        r:FireServer(part, pos, normal, slotNow(), origin, true, muzzle, ts, nil, false, nil, nil, nil)
+    end)
+    if not ok then return false, tostring(err) end
+    return true
+end
+
+local function snapCamera(part)
+    local c = cam()
+    if not c then return end
+    c.CFrame = c.CFrame:Lerp(CFrame.lookAt(c.CFrame.Position, part.Position), smoothK(C.AsAimSmooth))
+end
+
+local function angleTo(pos)
+    local c = cam()
+    if not c then return 180 end
+    local d = pos - c.CFrame.Position
+    if d.Magnitude < 0.01 then return 0 end
+    return math.deg(math.acos(math.clamp(c.CFrame.LookVector:Dot(d.Unit), -1, 1)))
+end
+
+local function asOpts()
+    local is360 = C.AsMode == "360"
+    return {
+        fov = is360 and 180 or C.AsFov, all = is360, part = C.AsPart, hitbox = false,
+        team = C.AsTeam, wall = (C.AsWall == "So visivel"), maxDist = C.AsMaxDist, sort = C.AsSort,
+        origin = C.AsFovOrigin, smokeIgnore = false,
+    }
+end
+
+local function asStep()
+    if not C.AsOn then
+        AS.cur, AS.since, AS.state = nil, nil, "desligado"
+        return
+    end
+    local now = os.clock()
+    if not aliveOf(LP) then AS.cur, AS.since, AS.state = nil, nil, "voce morto" return end
+    if childVal(LP:FindFirstChild("Status"), "Equipped") == "Knife" then
+        AS.cur, AS.since, AS.state = nil, nil, "faca equipada"
+        return
+    end
+    local tgt = pickTarget(asOpts())
+    AS.cur = tgt
+    if not tgt then AS.since, AS.state = nil, "sem alvo" return end
+
+    local part = tgt.part
+    local remote = C.AsRemote
+    -- no remote o alvo e enviado direto: nao precisa girar a camera
+    if C.AsMode == "360" and C.AsAim360 and not remote then
+        snapCamera(part)
+        if angleTo(part.Position) > C.AsAimTol then AS.state = "mirando" return end
+    end
+    if not AS.since then AS.since = now end
+    if now - AS.since < C.AsReact / 1000 then AS.state = "reacao" return end
+    if (not remote) and C.AsNeedLock and UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter then
+        AS.state = "mouse nao travado"
+        return
+    end
+    if now - AS.last < AS.nextDelay then AS.state = "delay" return end
+
+    local ok, err
+    if remote then
+        ok, err = fireRemote(tgt)
+        if ok then AS.sent = AS.sent + 1 else AS.remoteErr = tostring(err) end
+    else
+        ok = doClick()
+        if ok then AS.shots = AS.shots + 1 else err = "falha no clique" end
+    end
+    AS.last = now
+    local baseMs = C.AsDelay
+    if remote then baseMs = math.max(baseMs, fireInterval() * 1050) end
+    AS.nextDelay = (baseMs + math.random() * C.AsJitter) / 1000
+    AS.state = ok and "atirando" or tostring(err)
+end
+
+--------------------------------------------------------------------------
+-- Silent Aim: intercepta o Events.Shoot que o PROPRIO jogo dispara e troca parte/ponto/normal pelo
+-- alvo (sem tiro extra). O alvo e calculado a cada frame FORA do hook (o hook nao faz chamadas de
+-- metodo da Roblox, so le o cache), e qualquer erro dentro dele deixa o tiro original passar.
+-- Metodos (em ordem no modo Auto): Namecall -> Hookfunction -> Mira ao atirar (camera, sem hook).
+-- "Remote direto" (tiro extra ao clicar) so entra se for escolhido manualmente.
+--------------------------------------------------------------------------
+local disableFeature   -- definido junto das funcoes de configuracao (mais abaixo)
+local saDisable
+local SA = {
+    active = false, method = "nenhum", hooked = {}, oldNc = nil, oldFn = nil, remote = nil, cache = nil,
+    probe = nil, probeHits = 0, hits = 0, errs = 0, last = "-", state = "desligado", lmb = false, extraLast = 0,
+}
+local SA_ORDER = { "Namecall", "Hookfunction", "Mira ao atirar" }
+
+local function saFail(reason)
+    SA.active = false
+    SA.cache = nil
+    SA.state = "erro no hook"
+    local msg = tostring(reason)
+    post(function()
+        if disableFeature then disableFeature("SilentOn", msg) end
+    end)
+end
+
+-- so le o cache e troca os 3 primeiros argumentos (sem nenhuma chamada de metodo da Roblox)
+local function saSwap(args)
+    local k = SA.cache
+    if not k then return nil end
+    if os.clock() - k.t > 0.25 then return nil end
+    if C.SilentHitChance < 100 and math.random() * 100 > C.SilentHitChance then return nil end
+    args[1], args[2], args[3] = k.part, k.pos, k.normal
+    return args
+end
+
+local function saNamecall(self, ...)
+    local method = getnamecallmethod()
+    if method == "FireServer" then
+        if self == SA.probe then
+            SA.probeHits = SA.probeHits + 1
+        elseif SA.active and SA.method == "Namecall" and self == SA.remote
+            and not (checkcaller and checkcaller()) then
+            local args = table.pack(...)
+            local ok, res = pcall(saSwap, args)
+            if ok and res then
+                SA.hits = SA.hits + 1
+                if setnamecallmethod then setnamecallmethod(method) end
+                return SA.oldNc(self, table.unpack(res, 1, res.n))
+            elseif not ok then
+                SA.errs = SA.errs + 1
+                SA.last = tostring(res)
+                if SA.errs >= 5 then saFail("erro repetido no hook: " .. SA.last) end
+            end
+        end
+    end
+    if setnamecallmethod then setnamecallmethod(method) end
+    return SA.oldNc(self, ...)
+end
+
+local function saFireFn(self, ...)
+    if self == SA.probe then
+        SA.probeHits = SA.probeHits + 1
+    elseif SA.active and SA.method == "Hookfunction" and self == SA.remote
+        and not (checkcaller and checkcaller()) then
+        local args = table.pack(...)
+        local ok, res = pcall(saSwap, args)
+        if ok and res then
+            SA.hits = SA.hits + 1
+            return SA.oldFn(self, table.unpack(res, 1, res.n))
+        elseif not ok then
+            SA.errs = SA.errs + 1
+            SA.last = tostring(res)
+            if SA.errs >= 5 then saFail("erro repetido no hook: " .. SA.last) end
+        end
+    end
+    return SA.oldFn(self, ...)
+end
+
+-- funcoes que cada metodo precisa (lista vazia = metodo disponivel)
+local function saReq(method)
+    local m = {}
+    if method == "Namecall" then
+        if type(hookmetamethod) ~= "function" then m[#m + 1] = "hookmetamethod" end
+        if type(getnamecallmethod) ~= "function" then m[#m + 1] = "getnamecallmethod" end
+    elseif method == "Hookfunction" then
+        if type(hookfunction) ~= "function" then m[#m + 1] = "hookfunction" end
+    elseif method == "Remote direto" then
+        if not findShoot() then m[#m + 1] = "Events.Shoot" end
+    end
+    return m
+end
+
+local function saInstallNamecall()
+    if SA.hooked.Namecall then return true end
+    local fn = saNamecall
+    if type(newcclosure) == "function" then fn = newcclosure(saNamecall) end
+    local ok, old = pcall(hookmetamethod, game, "__namecall", fn)
+    if not ok or type(old) ~= "function" then return false, "hookmetamethod falhou: " .. tostring(old) end
+    SA.oldNc = old
+    SA.hooked.Namecall = true
+    return true
+end
+
+local function saInstallFire()
+    if SA.hooked.Hookfunction then return true end
+    local okT, target = pcall(function() return SA.remote.FireServer end)
+    if not okT or type(target) ~= "function" then return false, "FireServer nao e uma funcao hookavel" end
+    local fn = saFireFn
+    if type(newcclosure) == "function" then fn = newcclosure(saFireFn) end
+    local ok, old = pcall(hookfunction, target, fn)
+    if not ok or type(old) ~= "function" then return false, "hookfunction falhou: " .. tostring(old) end
+    SA.oldFn = old
+    SA.hooked.Hookfunction = true
+    return true
+end
+
+-- chamada de teste: dispara FireServer num RemoteEvent solto (sem pai, nao vai a lugar nenhum)
+-- e confere se o hook viu. Se nao viu, o metodo nao serve neste executor.
+local function saProbe()
+    local ok = pcall(function()
+        local p = Instance.new("RemoteEvent")
+        SA.probe = p
+        SA.probeHits = 0
+        p:FireServer("vantage_probe")
+        p:Destroy()
+    end)
+    local hits = SA.probeHits
+    SA.probe = nil
+    if not ok then return false, "nao foi possivel criar o RemoteEvent de teste" end
+    if hits <= 0 then return false, "o hook nao recebeu a chamada de teste" end
+    return true
+end
+
+saDisable = function()
+    SA.active = false
+    SA.cache = nil
+    SA.state = "desligado"
+end
+
+-- retorna ok, lista de avisos (metodos que falharam antes do que funcionou ou motivo geral)
+local function saEnable()
+    local notes = {}
+    SA.remote = findShoot()
+    if not SA.remote then
+        return false, { "Events.Shoot nao encontrado em ReplicatedStorage.Events (entre numa partida e tente de novo)" }
+    end
+    local order = {}
+    if C.SilentMethod ~= "Auto" then order[#order + 1] = C.SilentMethod end
+    for _, m in ipairs(SA_ORDER) do
+        if m ~= C.SilentMethod then order[#order + 1] = m end
+    end
+    SA.errs = 0
+    for _, m in ipairs(order) do
+        local miss = saReq(m)
+        if #miss > 0 then
+            notes[#notes + 1] = m .. ": falta " .. table.concat(miss, " + ")
+        else
+            local ok, err = true, nil
+            if m == "Namecall" then ok, err = saInstallNamecall()
+            elseif m == "Hookfunction" then ok, err = saInstallFire() end
+            if ok and (m == "Namecall" or m == "Hookfunction") then
+                local prev = SA.method
+                SA.method = m
+                ok, err = saProbe()
+                if not ok then SA.method = prev end
+            end
+            if ok then
+                SA.method = m
+                SA.active = true
+                SA.state = "ligado"
+                return true, notes
+            end
+            notes[#notes + 1] = m .. ": " .. tostring(err)
+        end
+    end
+    SA.active = false
+    SA.method = "nenhum"
+    return false, notes
+end
+
+-- calcula o alvo do silent aim (cache usado pelo hook) e executa os metodos sem hook
+local function saUpdate()
+    if not SA.active then SA.cache = nil return end
+    if not aliveOf(LP) then SA.cache = nil SA.state = "voce morto" return end
+    if childVal(LP:FindFirstChild("Status"), "Equipped") == "Knife" then SA.cache = nil SA.state = "faca equipada" return end
+    local c = cam()
+    if not c then SA.cache = nil return end
+    local tgt = pickTarget({
+        fov = C.SilentFov, part = C.SilentPart, hitbox = false, team = C.SilentTeam,
+        wall = (C.SilentWall == "So visivel"), maxDist = C.SilentMaxDist, sort = C.SilentSort,
+        origin = C.SilentFovOrigin, smokeIgnore = false,
+    })
+    if not tgt then SA.cache = nil SA.state = "sem alvo" return end
+    local part = tgt.part
+    if C.SilentPart == "Mais proxima" then
+        local origin2d = aimOrigin(C.SilentFovOrigin)
+        local bestD
+        for _, pt in ipairs(tgt.list) do
+            local sp = c:WorldToViewportPoint(pt.Position)
+            local d = (Vector2.new(sp.X, sp.Y) - origin2d).Magnitude
+            if not bestD or d < bestD then bestD = d part = pt end
+        end
+    end
+    local pos, normal = surfaceHit(c.CFrame.Position, part)
+    SA.cache = { part = part, pos = pos, normal = normal, t = os.clock() }
+    SA.state = "alvo travado"
+
+    local lmb = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+    if SA.method == "Mira ao atirar" then
+        if lmb then c.CFrame = CFrame.lookAt(c.CFrame.Position, part.Position) end
+    elseif SA.method == "Remote direto" then
+        local now = os.clock()
+        if lmb and not SA.lmb and now - SA.extraLast >= fireInterval() * 1.05 then
+            SA.extraLast = now
+            local ok, err = fireRemote({ part = part })
+            if not ok then SA.last = tostring(err) end
+        end
+    end
+    SA.lmb = lmb
+end
+
+--------------------------------------------------------------------------
+-- Movimento: auto pular
+--------------------------------------------------------------------------
+local GuiService = game:GetService("GuiService")
+local AJ = { held = false, last = 0, state = "desligado" }
+local VIM
+local function getVIM()
+    if VIM == nil then
+        local ok, v = pcall(function() return game:GetService("VirtualInputManager") end)
+        VIM = ok and v or false
+    end
+    return VIM
+end
+local function setSpace(down)
+    local v = getVIM()
+    if v then
+        local ok = pcall(function() v:SendKeyEvent(down, Enum.KeyCode.Space, false, game) end)
+        if ok then return true end
+    end
+    if down and keypress then pcall(keypress, 0x20) return true end
+    if (not down) and keyrelease then pcall(keyrelease, 0x20) return true end
+    return false
+end
+local function keyDown(name)
+    local k = KEYMAP[name]
+    if not k then return true end -- "Sempre ativo"
+    if k.EnumType == Enum.UserInputType then return UserInputService:IsMouseButtonPressed(k) end
+    return UserInputService:IsKeyDown(k)
+end
+
+local function ajStep()
+    local want = C.AutoJump
+    local char = LP.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if want and (not hum or hum.Health <= 0 or not aliveOf(LP)) then want = false end
+    if want and (UserInputService:GetFocusedTextBox() or GuiService.MenuIsOpen) then want = false end
+    if want and not keyDown(C.AjKey) then want = false end
+    if want and C.AjOnlyMoving and hum.MoveDirection.Magnitude < 0.1 then want = false end
+    if C.AjMethod == "Humanoid.Jump" then
+        if AJ.held then setSpace(false) AJ.held = false end
+        if want and os.clock() - AJ.last >= C.AjInterval / 1000 and hum.FloorMaterial ~= Enum.Material.Air then
+            hum.Jump = true
+            AJ.last = os.clock()
+        end
+    elseif want ~= AJ.held then
+        if setSpace(want) then AJ.held = want end
+    end
+    AJ.state = want and "ativo" or (C.AutoJump and "aguardando" or "desligado")
+end
+
+--------------------------------------------------------------------------
+-- Camera: terceira pessoa (offset aplicado no fim do frame e desfeito no
+-- inicio do proximo, para o resto do jogo e o aimbot verem a camera original)
+--------------------------------------------------------------------------
+local TP = { applied = false, orig = nil, saved = {}, armSaved = {}, parts = {}, arms = {}, char = nil, stamp = 0, fov = nil }
+local BODY_NAMES = {
+    Head = true, UpperTorso = true, LowerTorso = true,
+    LeftUpperArm = true, LeftLowerArm = true, LeftHand = true,
+    RightUpperArm = true, RightLowerArm = true, RightHand = true,
+    LeftUpperLeg = true, LeftLowerLeg = true, LeftFoot = true,
+    RightUpperLeg = true, RightLowerLeg = true, RightFoot = true,
+}
+
+local function tpRestoreVis()
+    for p, v in pairs(TP.saved) do pcall(function() p.Transparency = v end) end
+    for p, v in pairs(TP.armSaved) do pcall(function() p.Transparency = v end) end
+    TP.saved, TP.armSaved = {}, {}
+end
+
+local function tpRestoreCam()
+    if TP.applied then
+        local c = cam()
+        if c and TP.orig then c.CFrame = TP.orig end
+        TP.applied = false
+    end
+end
+
+local function tpRefreshLists(c, char)
+    TP.parts, TP.arms = {}, {}
+    if char then
+        for _, d in ipairs(char:GetDescendants()) do
+            if d:IsA("BasePart") then
+                local body = BODY_NAMES[d.Name] and d.Parent == char
+                local acc = d.Name == "Handle" and d.Parent:IsA("Accessory")
+                if body or acc then TP.parts[#TP.parts + 1] = d end
+            end
+        end
+    end
+    if c then
+        for _, d in ipairs(c:GetDescendants()) do
+            if d:IsA("BasePart") then TP.arms[#TP.arms + 1] = d end
+        end
+    end
+end
+
+local function tpApply()
+    local c = cam()
+    if not c then return end
+    if C.FovOn then
+        if not TP.fov then TP.fov = c.FieldOfView end
+        c.FieldOfView = C.FovVal
+    elseif TP.fov then
+        c.FieldOfView = TP.fov
+        TP.fov = nil
+    end
+
+    local char = LP.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local active = C.TpOn and hum and hum.Health > 0
+    if TP.char ~= char then
+        TP.saved, TP.armSaved, TP.char, TP.stamp = {}, {}, char, 0
+    end
+    if not active then
+        if next(TP.saved) or next(TP.armSaved) then tpRestoreVis() end
+        return
+    end
+
+    local now = os.clock()
+    if now - TP.stamp > 0.6 then
+        TP.stamp = now
+        tpRefreshLists(c, char)
+    end
+
+    -- corpo visivel / bracos da primeira pessoa escondidos
+    if C.TpBody then
+        for _, p in ipairs(TP.parts) do
+            if p.Parent then
+                p.LocalTransparencyModifier = 0
+                if p.Transparency > 0.01 then
+                    if TP.saved[p] == nil then TP.saved[p] = p.Transparency end
+                    p.Transparency = 0
+                end
+            end
+        end
+    elseif next(TP.saved) then
+        for p, v in pairs(TP.saved) do pcall(function() p.Transparency = v end) end
+        TP.saved = {}
+    end
+    if C.TpHideArms then
+        for _, p in ipairs(TP.arms) do
+            if p.Parent and p.Transparency < 1 then
+                if TP.armSaved[p] == nil then TP.armSaved[p] = p.Transparency end
+                p.Transparency = 1
+            end
+        end
+    elseif next(TP.armSaved) then
+        for p, v in pairs(TP.armSaved) do pcall(function() p.Transparency = v end) end
+        TP.armSaved = {}
+    end
+
+    -- offset da camera (com colisao)
+    local base = c.CFrame
+    local want = base * CFrame.new(C.TpX, C.TpY, C.TpDist)
+    local pos = want.Position
+    if C.TpCollide then
+        rayParams.FilterDescendantsInstances = rebuildIgnore(false)
+        local res = workspace:Raycast(base.Position, pos - base.Position, rayParams)
+        if res then pos = res.Position + res.Normal * 0.3 end
+    end
+    TP.orig = base
+    c.CFrame = CFrame.new(pos) * (base - base.Position)
+    TP.applied = true
+end
+
+--------------------------------------------------------------------------
+-- Corpo: Spin Bot e Anti-Aim (so giram o HumanoidRootPart do seu personagem;
+-- a camera nao e tocada, entao a visao normal e a 3a pessoa seguem iguais)
+--------------------------------------------------------------------------
+local BD = {
+    last = os.clock(), hum = nil, autoRot = nil, fixedYaw = nil,
+    spin = 0, spinSign = 1, spinT = 0, flip = 1, flipT = 0,
+    rnd = 0, rndT = 0, pRnd = 0, pT = 0, tilt = 0, roll = 0, state = "desligado",
+}
+
+local function bodyRestore()
+    if BD.hum and BD.autoRot ~= nil then
+        pcall(function() BD.hum.AutoRotate = BD.autoRot end)
+    end
+    BD.hum, BD.autoRot, BD.fixedYaw = nil, nil, nil
+    BD.tilt, BD.roll = 0, 0
+    BD.state = (C.SpinOn or C.AaOn) and "pausado" or "desligado"
+end
+
+local function bodyApply()
+    local char = LP.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local c = cam()
+    if not ((C.SpinOn or C.AaOn) and hum and root and c and hum.Health > 0 and aliveOf(LP)) then
+        if BD.autoRot ~= nil then bodyRestore() end
+        BD.state = "desligado"
+        BD.last = os.clock()
+        return
+    end
+
+    local now = os.clock()
+    local dt = math.min(now - BD.last, 0.1)
+    BD.last = now
+    local moving = hum.MoveDirection.Magnitude > 0.1
+    local function whenOk(w)
+        return w == "Sempre" or (w == "Somente parado" and not moving) or (w == "Somente movendo" and moving)
+    end
+    local shooting = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+    local look = c.CFrame.LookVector
+    local camYaw = math.atan2(-look.X, -look.Z)
+
+    local doSpin = C.SpinOn and whenOk(C.SpinWhen) and not (C.SpinPauseShoot and shooting)
+    local doAA = C.AaOn and whenOk(C.AaWhen) and not (C.AaPauseShoot and shooting)
+    if not doSpin and not doAA then
+        if BD.autoRot ~= nil then bodyRestore() end
+        BD.state = "pausado"
+        return
+    end
+
+    local yaw, pitch, roll = camYaw, 0, 0
+
+    if doAA then
+        local base
+        if C.AaBase == "Atras" then base = math.pi
+        elseif C.AaBase == "Esquerda" then base = math.pi / 2
+        elseif C.AaBase == "Direita" then base = -math.pi / 2
+        elseif C.AaBase == "Frente" then base = 0
+        else base = math.rad(C.AaYaw) end
+
+        local rate = math.max(C.AaRate, 0.5)
+        local off = 0
+        BD.flipT = BD.flipT + dt
+        if BD.flipT >= 1 / rate then BD.flipT = 0 BD.flip = -BD.flip end
+        BD.rndT = BD.rndT + dt
+        local rndNew = false
+        if BD.rndT >= 1 / rate then BD.rndT = 0 rndNew = true end
+
+        if C.AaMode == "Jitter" then
+            off = math.rad(C.AaRange) * BD.flip
+        elseif C.AaMode == "Oscilar" then
+            off = math.rad(C.AaRange) * math.sin(now * math.pi * 2 * C.AaSweep)
+        elseif C.AaMode == "Aleatorio" then
+            if rndNew then BD.rnd = (math.random() * 2 - 1) * math.rad(C.AaRange) end
+            off = BD.rnd
+        end
+
+        local ref
+        if C.AaFollowCam then
+            ref = camYaw
+        else
+            if not BD.fixedYaw then
+                local rl = root.CFrame.LookVector
+                BD.fixedYaw = math.atan2(-rl.X, -rl.Z)
+            end
+            ref = BD.fixedYaw
+        end
+        yaw = ref + base + off
+
+        local amt = math.rad(C.AaPitchAmt)
+        if C.AaPitch == "Cima" then pitch = amt
+        elseif C.AaPitch == "Baixo" then pitch = -amt
+        elseif C.AaPitch == "Jitter" then pitch = amt * BD.flip
+        elseif C.AaPitch == "Aleatorio" then
+            if rndNew then BD.pRnd = (math.random() * 2 - 1) * amt end
+            pitch = BD.pRnd
+        end
+        roll = math.rad(C.AaRoll)
+    end
+
+    if doSpin then
+        local sign = (C.SpinDir == "Anti-horario") and 1 or -1  -- yaw positivo = anti-horario (visto de cima)
+        if C.SpinDir == "Alternando" then
+            BD.spinT = BD.spinT + dt
+            if BD.spinT >= C.SpinFlip then BD.spinT = 0 BD.spinSign = -BD.spinSign end
+            sign = BD.spinSign
+        end
+        local sp = C.SpinSpeed * (1 + (math.random() * 2 - 1) * C.SpinVar / 100)
+        BD.spin = (BD.spin + sign * math.rad(sp) * dt) % (math.pi * 2)
+        yaw = (doAA and yaw or 0) + BD.spin
+        BD.tilt = (BD.tilt + math.rad(C.SpinPitchSpeed) * dt) % (math.pi * 2)
+        BD.roll = (BD.roll + math.rad(C.SpinRollSpeed) * dt) % (math.pi * 2)
+        pitch = pitch + BD.tilt
+        roll = roll + BD.roll
+    end
+
+    if BD.autoRot == nil then
+        BD.hum = hum
+        BD.autoRot = hum.AutoRotate
+    end
+    hum.AutoRotate = false
+    root.CFrame = CFrame.new(root.Position) * CFrame.Angles(0, yaw, 0) * CFrame.Angles(pitch, 0, roll)
+    BD.state = doSpin and (doAA and "spin + anti-aim" or "spin") or "anti-aim"
+end
+
+--------------------------------------------------------------------------
+-- Auto agachar: o jogo agacha enquanto a tecla esta segurada (Crouch = LeftControl por padrao),
+-- entao seguramos/soltamos a tecla virtual conforme o modo.
+--------------------------------------------------------------------------
+local AC = { held = false, last = 0, state = "desligado", flip = false, flipT = 0 }
+local AC_KEYS = {
+    LeftControl = { Enum.KeyCode.LeftControl, 0xA2 }, C = { Enum.KeyCode.C, 0x43 }, X = { Enum.KeyCode.X, 0x58 },
+    LeftAlt = { Enum.KeyCode.LeftAlt, 0xA4 }, LeftShift = { Enum.KeyCode.LeftShift, 0xA0 },
+}
+local function setCrouchKey(down)
+    local k = AC_KEYS[C.AcKey] or AC_KEYS.LeftControl
+    local v = getVIM()
+    if v then
+        local ok = pcall(function() v:SendKeyEvent(down, k[1], false, game) end)
+        if ok then return true end
+    end
+    if down and keypress then pcall(keypress, k[2]) return true end
+    if (not down) and keyrelease then pcall(keyrelease, k[2]) return true end
+    return false
+end
+local function acStep()
+    local char = LP.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local want = C.AcOn
+    if want and (not hum or hum.Health <= 0 or not aliveOf(LP)) then want = false end
+    if want and (UserInputService:GetFocusedTextBox() or GuiService.MenuIsOpen) then want = false end
+    local now = os.clock()
+    if want then
+        local m = C.AcMode
+        if m == "Agachar ao atirar" then
+            want = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+                or (C.AsOn and AS.cur ~= nil and AS.state == "atirando")
+        elseif m == "Agachar parado" then
+            want = hum.MoveDirection.Magnitude < 0.1
+        elseif m == "Com anti-aim" then
+            want = (C.AaOn or C.SpinOn) and BD.state ~= "desligado" and BD.state ~= "pausado"
+        elseif m == "Spam (alternar)" then
+            local iv = math.max(C.AcInterval, 250) / 1000
+            if now - AC.flipT >= iv then AC.flipT = now AC.flip = not AC.flip end
+            want = AC.flip
+        end
+    end
+    if want ~= AC.held and now - AC.last >= 0.1 then
+        if setCrouchKey(want) then AC.held = want AC.last = now end
+    end
+    AC.state = want and "agachando" or (C.AcOn and "aguardando" or "desligado")
+end
+
+local function restoreMovement()
+    C.TpOn, C.SpinOn, C.AaOn, C.AutoJump, C.FovOn, C.AcOn = false, false, false, false, false, false
+    pcall(acStep)
+    pcall(function() if AJ.held then setSpace(false) AJ.held = false end end)
+    pcall(bodyRestore)
+    pcall(tpRestoreCam)
+    pcall(tpApply)       -- restaura FOV/transparencias
+    pcall(tpRestoreVis)
+end
+
+RunService:BindToRenderStep("VH_CamRestore", Enum.RenderPriority.First.Value, tpRestoreCam)
+RunService:BindToRenderStep("VH_CamApply", Enum.RenderPriority.Last.Value, function()
+    pcall(tpApply)
+    pcall(bodyApply)
+end)
+conn(RunService.Heartbeat, function()
+    pcall(ajStep)
+    pcall(bodyApply)
+    pcall(acStep)
+end)
+
+--------------------------------------------------------------------------
+-- Arma: no recoil / no spread (GunConfig, modulo usado pelo cliente)
+--------------------------------------------------------------------------
+local GCM = { mod = nil, orig = nil, cfgs = {}, saved = {}, installed = false }
+local REC_FIELDS = { "Kick", "KickBack", "Roll", "CamShare", "YawShare" }
+local SPR_FIELDS = { "Base", "AdsBase", "Walk", "Run", "Jump", "Land", "BloomPerShot", "MaxBloom" }
+local PAT_FIELDS = { "Climb", "Bias", "Jitter", "SwayAmp" }
+local RATE_FIELDS = { "Rate", "AdsRate" }
+
+local function patchCfg(c)
+    if type(c) ~= "table" then return end
+    local s = GCM.saved[c]
+    if not s then
+        s = { f = {}, p = nil, pt = nil }
+        for _, k in ipairs(REC_FIELDS) do s.f[k] = c[k] end
+        for _, k in ipairs(SPR_FIELDS) do s.f[k] = c[k] end
+        for _, k in ipairs(RATE_FIELDS) do s.f[k] = c[k] end
+        if type(c.Burst) == "table" then
+            s.burst = c.Burst
+            s.bf = { Rate = c.Burst.Rate, Cycle = c.Burst.Cycle }
+        end
+        if type(c.Pattern) == "table" and not GCM.saved[c.Pattern] then
+            s.pt = c.Pattern
+            s.p = {}
+            for _, k in ipairs(PAT_FIELDS) do s.p[k] = c.Pattern[k] end
+            GCM.saved[c.Pattern] = { shared = true }
+        end
+        GCM.saved[c] = s
+        GCM.cfgs[#GCM.cfgs + 1] = c
+    end
+    for _, k in ipairs(REC_FIELDS) do
+        if s.f[k] ~= nil then c[k] = C.NoRecoil and 0 or s.f[k] end
+    end
+    for _, k in ipairs(SPR_FIELDS) do
+        if s.f[k] ~= nil then c[k] = C.NoSpread and 0 or s.f[k] end
+    end
+    for _, k in ipairs(RATE_FIELDS) do
+        if s.f[k] ~= nil then c[k] = C.FireRateOn and s.f[k] * C.FireRateMul or s.f[k] end
+    end
+    if s.burst and s.bf then
+        if s.bf.Rate then s.burst.Rate = C.FireRateOn and s.bf.Rate * C.FireRateMul or s.bf.Rate end
+        if s.bf.Cycle then s.burst.Cycle = C.FireRateOn and s.bf.Cycle / C.FireRateMul or s.bf.Cycle end
+    end
+    if s.pt and s.p then
+        for k, v in pairs(s.p) do
+            if v ~= nil then s.pt[k] = C.NoRecoil and 0 or v end
+        end
+    end
+end
+
+local function repatchAll()
+    for _, c in ipairs(GCM.cfgs) do patchCfg(c) end
+end
+
+local function installGunConfig()
+    if GCM.installed then return true end
+    local mods = ReplicatedStorage:FindFirstChild("Modules")
+    local ms = mods and mods:FindFirstChild("GunConfig")
+    if not ms then
+        for _, d in ipairs(ReplicatedStorage:GetDescendants()) do
+            if d.Name == "GunConfig" and d:IsA("ModuleScript") then ms = d break end
+        end
+    end
+    if not ms then return false, "GunConfig nao encontrado" end
+    local ok, gc = pcall(require, ms)
+    if not ok or type(gc) ~= "table" then return false, "require(GunConfig) falhou" end
+    GCM.mod = gc
+    GCM.orig = {
+        Get = gc.Get, PatternOffset = gc.PatternOffset, Bloom = gc.Bloom,
+        MovementError = gc.MovementError, SpringImpulse = gc.SpringImpulse,
+    }
+    local o = GCM.orig
+    gc.Get = function(n)
+        local c = o.Get(n)
+        if c then patchCfg(c) end
+        return c
+    end
+    gc.PatternOffset = function(cfg, n)
+        if C.NoRecoil then return 0, 0 end
+        return o.PatternOffset(cfg, n)
+    end
+    gc.Bloom = function(cfg, n)
+        if C.NoSpread then return 0 end
+        return o.Bloom(cfg, n)
+    end
+    gc.MovementError = function(cfg, sp)
+        if C.NoSpread then return 0 end
+        return o.MovementError(cfg, sp)
+    end
+    gc.SpringImpulse = function(a, b)
+        if C.NoRecoil then return 0 end
+        return o.SpringImpulse(a, b)
+    end
+    -- configs ja criadas (cache do modulo): puxa todas pelo nome das armas
+    pcall(function()
+        local we = ReplicatedStorage:FindFirstChild("WeaponEngine")
+        local wf = we and we:FindFirstChild("Weapons")
+        if wf then
+            for _, w in ipairs(wf:GetChildren()) do pcall(gc.Get, w.Name) end
+        end
+    end)
+    GCM.installed = true
+    return true
+end
+
+local function restoreGunConfig()
+    if not GCM.installed or not GCM.mod then return end
+    C.NoRecoil = false
+    C.NoSpread = false
+    C.FireRateOn = false
+    repatchAll()
+    for k, v in pairs(GCM.orig) do pcall(function() GCM.mod[k] = v end) end
+    GCM.installed = false
+    GCM.cfgs = {}
+    GCM.saved = {}
+end
+
+--------------------------------------------------------------------------
+-- Movimento: velocidade (ReplicatedStorage.Speed)
+--------------------------------------------------------------------------
+local MV = { speedSaved = {}, stamp = 0, state = "desligado" }
+
+local function origSpeedOf(weapon)
+    local f = ReplicatedStorage:FindFirstChild("Speed")
+    local w = f and f:FindFirstChild(tostring(weapon))
+    local v = w and w:FindFirstChild("WalkSpeed")
+    local sv = v and MV.speedSaved[v]
+    if sv then return sv * 0.0694 end
+    return nil
+end
+
+local function speedApply()
+    local f = ReplicatedStorage:FindFirstChild("Speed")
+    if not f then return end
+    for _, w in ipairs(f:GetChildren()) do
+        local wv, sc = w:FindFirstChild("WalkSpeed"), w:FindFirstChild("Scoped")
+        for _, v in ipairs({ wv, sc }) do
+            if v and (v:IsA("NumberValue") or v:IsA("IntValue")) and MV.speedSaved[v] == nil then
+                MV.speedSaved[v] = v.Value
+            end
+        end
+        if wv and MV.speedSaved[wv] then
+            local ow = MV.speedSaved[wv]
+            local want = C.SpeedOn and (C.SpeedVal / 0.0694) or ow
+            if wv.Value ~= want then wv.Value = want end
+            if sc and MV.speedSaved[sc] then
+                local osc = MV.speedSaved[sc]
+                local ratio = (ow > 0) and (osc / ow) or 1
+                local wantS = C.SpeedOn and (C.SpeedVal / 0.0694 * ratio) or osc
+                if sc.Value ~= wantS then sc.Value = wantS end
+            end
+        end
+    end
+end
+
+local function mvApply()
+    pcall(speedApply)
+    MV.state = C.SpeedOn and "ativo" or "desligado"
+end
+
+local function modsRefresh()
+    pcall(mvApply)
+    if (C.NoRecoil or C.NoSpread or C.FireRateOn) and not GCM.installed then pcall(installGunConfig) end
+    pcall(repatchAll)
+end
+
+local function restoreMods()
+    C.SpeedOn = false
+    pcall(mvApply)
+end
+
+conn(RunService.Heartbeat, function()
+    local now = os.clock()
+    if now - MV.stamp > 0.5 then
+        MV.stamp = now
+        if C.SpeedOn then pcall(mvApply) end
+    end
+end)
+
+--------------------------------------------------------------------------
+-- Visuais: smoke e efeitos de tela
+--------------------------------------------------------------------------
+local smokeSaved = {}
+local effectSaved = {}
+local TOGGLE_CLASSES = { ParticleEmitter = true, Smoke = true, Fire = true, Sparkles = true, Trail = true, Beam = true }
+
+local function hideInst(d)
+    if smokeSaved[d] then return end
+    pcall(function()
+        if d:IsA("BasePart") then
+            smokeSaved[d] = { "Transparency", d.Transparency }
+            d.Transparency = 1
+        elseif d:IsA("Decal") or d:IsA("Texture") then
+            smokeSaved[d] = { "Transparency", d.Transparency }
+            d.Transparency = 1
+        elseif TOGGLE_CLASSES[d.ClassName] then
+            smokeSaved[d] = { "Enabled", d.Enabled }
+            d.Enabled = false
+        end
+    end)
+end
+
+local function hideTree(root)
+    hideInst(root)
+    for _, d in ipairs(root:GetDescendants()) do hideInst(d) end
+end
+
+local function smokeRoot(d)
+    local x = d
+    for _ = 1, 6 do
+        if not x or x == workspace then return nil end
+        if CollectionService:HasTag(x, "VisionSmoke") then return x end
+        if C.NoSmokeWalls and CollectionService:HasTag(x, "BlocksSight") then return x end
+        x = x.Parent
+    end
+    return nil
+end
+
+local function restoreSmoke()
+    for inst, data in pairs(smokeSaved) do
+        pcall(function() inst[data[1]] = data[2] end)
+    end
+    smokeSaved = {}
+end
+
+local function scanSmoke()
+    for _, t in ipairs(CollectionService:GetTagged("VisionSmoke")) do pcall(hideTree, t) end
+    if C.NoSmokeWalls then
+        for _, t in ipairs(CollectionService:GetTagged("BlocksSight")) do pcall(hideTree, t) end
+    end
+    task.spawn(function()
+        local n = 0
+        for _, d in ipairs(workspace:GetDescendants()) do
+            if d:IsA("ParticleEmitter") or d:IsA("Smoke") then
+                if smokeRoot(d) or d.Name:lower():find("smoke") then hideInst(d) end
+            end
+            n = n + 1
+            if n % 1500 == 0 then task.wait() end
+        end
+    end)
+end
+
+conn(CollectionService:GetInstanceAddedSignal("VisionSmoke"), function(i)
+    if C.NoSmoke then task.defer(function() pcall(hideTree, i) end) end
+end)
+conn(CollectionService:GetInstanceAddedSignal("BlocksSight"), function(i)
+    if C.NoSmoke and C.NoSmokeWalls then task.defer(function() pcall(hideTree, i) end) end
+end)
+conn(workspace.DescendantAdded, function(d)
+    if not C.NoSmoke then return end
+    if d:IsA("ParticleEmitter") or d:IsA("Smoke") or d:IsA("BasePart") then
+        if smokeRoot(d) or ((d:IsA("ParticleEmitter") or d:IsA("Smoke")) and d.Name:lower():find("smoke")) then
+            task.defer(function() hideInst(d) end)
+        end
+    end
+end)
+
+local function effectWanted(e)
+    local cls = e.ClassName
+    if C.NoBlur and (cls == "BlurEffect" or cls == "DepthOfFieldEffect") then return true end
+    if C.NoColor and (cls == "ColorCorrectionEffect" or cls == "BloomEffect" or cls == "SunRaysEffect") then return true end
+    return false
+end
+
+local function handleEffect(e)
+    if not e:IsA("PostEffect") then return end
+    if e.Name == "Stun" and C.NoFlash then
+        pcall(function() e.Enabled = false end)
+        task.defer(function() pcall(function() e:Destroy() end) end)
+        return
+    end
+    if effectWanted(e) then
+        if effectSaved[e] == nil then effectSaved[e] = e.Enabled end
+        e.Enabled = false
+        conn(e:GetPropertyChangedSignal("Enabled"), function()
+            if effectWanted(e) and e.Enabled then e.Enabled = false end
+        end)
+    end
+end
+
+local function scanEffects()
+    for _, e in ipairs(Lighting:GetChildren()) do handleEffect(e) end
+    local c = cam()
+    if c then for _, e in ipairs(c:GetChildren()) do handleEffect(e) end end
+end
+
+local function restoreEffects()
+    for e, en in pairs(effectSaved) do
+        pcall(function() e.Enabled = en end)
+    end
+    effectSaved = {}
+end
+
+local watchedCam
+local function watchCamera()
+    local c = cam()
+    if c and c ~= watchedCam then
+        watchedCam = c
+        conn(c.ChildAdded, handleEffect)
+    end
+end
+watchCamera()
+conn(Lighting.ChildAdded, handleEffect)
+conn(workspace:GetPropertyChangedSignal("CurrentCamera"), function()
+    watchCamera()
+    scanEffects()
+end)
+
+--------------------------------------------------------------------------
+-- Loop principal
+--------------------------------------------------------------------------
+local function circleUpdate(circle, stroke, on, deg, color, origin)
+    if not on then circle.Visible = false return end
+    local r = fovPx(deg)
+    if r > 3000 then circle.Visible = false return end
+    local o = aimOrigin(origin)
+    circle.Size = UDim2.fromOffset(r * 2, r * 2)
+    circle.Position = UDim2.fromOffset(o.X, o.Y)
+    stroke.Color = color
+    circle.Visible = true
+end
+
+local BIND = "VH_Main"
+RunService:BindToRenderStep(BIND, Enum.RenderPriority.Camera.Value + 1, function()
+    local now = os.clock()
+    for _, o in pairs(ESP) do
+        local ok = pcall(updateESP, o, now)
+        if not ok then pcall(hideESP, o) end
+    end
+    circleUpdate(aimCircle, aimStroke, C.AimOn and C.AimShowFov, C.AimFov, C.AimFovColor, C.AimFovOrigin)
+    circleUpdate(asCircle, asStroke, C.AsOn and C.AsShowFov and C.AsMode ~= "360", C.AsFov, C.AsFovColor, C.AsFovOrigin)
+    circleUpdate(silCircle, silStroke, C.SilentOn and SA.active and C.SilentShowFov, C.SilentFov, C.SilentFovColor, C.SilentFovOrigin)
+    pcall(aimStep)
+    pcall(saUpdate)
+    pcall(asStep)
+end)
+
+--------------------------------------------------------------------------
+-- Menu Rayfield (PT/EN)
+--------------------------------------------------------------------------
+local EN = {
+    ["Geral"] = "General",
+    ["Chams"] = "Chams",
+    ["ESP"] = "ESP",
+    ["Aimbot"] = "Aimbot",
+    ["Auto Shoot"] = "Auto Shoot",
+    ["Camera"] = "Camera",
+    ["Spin, Anti-Aim e Movimento"] = "Spin, Anti-Aim & Movement",
+    ["Arma"] = "Weapon",
+    ["Visuais"] = "Visuals",
+    ["Config"] = "Config",
+    ["Diagnostico"] = "Diagnostics",
+    ["Silent Aim"] = "Silent Aim",
+    ["Intercepta o Events.Shoot que o proprio jogo envia e troca o alvo do tiro por um inimigo dentro do FOV. Nao cria tiro extra. Ao ativar, o metodo e validado e, se nao funcionar neste executor, a funcao se desativa sozinha avisando o que falta."] = "Intercepts the Events.Shoot the game itself sends and swaps the shot target for an enemy inside the FOV. It does not create an extra shot. On enable, the method is validated and, if it does not work on this executor, the feature turns itself off and tells you what is missing.",
+    ["Ativar silent aim"] = "Enable silent aim",
+    ["Metodo do hook"] = "Hook method",
+    ["Auto"] = "Auto",
+    ["Namecall"] = "Namecall",
+    ["Hookfunction"] = "Hookfunction",
+    ["Mira ao atirar"] = "Aim on shoot",
+    ["Remote direto"] = "Direct remote",
+    ["Auto: tenta Namecall, depois Hookfunction, depois Mira ao atirar (camera, sem hook). Remote direto envia um tiro extra ao clicar e so entra se voce escolher."] = "Auto: tries Namecall, then Hookfunction, then Aim on shoot (camera, no hook). Direct remote sends an extra shot on click and is only used if you pick it.",
+    ["Chance de acerto"] = "Hit chance",
+    ["Revalidar metodo agora"] = "Revalidate method now",
+    [" | metodo: "] = " | method: ",
+    ["Trocas: "] = "Swaps: ",
+    [" | erros: "] = " | errors: ",
+    ["Trocas: 0 | erros: 0 | ultimo erro: -"] = "Swaps: 0 | errors: 0 | last error: -",
+    ["ligado"] = "on",
+    ["erro no hook"] = "hook error",
+    ["alvo travado"] = "target locked",
+    ["nenhum"] = "none",
+    ["Auto agachar"] = "Auto crouch",
+    ["O jogo agacha enquanto a tecla esta segurada; o script segura/solta a tecla virtual conforme o modo. O jogo limita agachar em sequencia (spam), por isso o intervalo minimo do modo spam e 250 ms."] = "The game crouches while the key is held; the script holds/releases the virtual key according to the mode. The game limits crouch spam, so the minimum spam interval is 250 ms.",
+    ["Ativar auto agachar"] = "Enable auto crouch",
+    ["Modo de agachar"] = "Crouch mode",
+    ["Sempre agachado"] = "Always crouched",
+    ["Agachar ao atirar"] = "Crouch while shooting",
+    ["Agachar parado"] = "Crouch while standing still",
+    ["Com anti-aim"] = "With anti-aim",
+    ["Spam (alternar)"] = "Spam (toggle)",
+    ["Tecla de agachar do jogo"] = "Game crouch key",
+    ["Intervalo do spam"] = "Spam interval",
+    ["Auto agachar: desligado"] = "Auto crouch: off",
+    ["Auto agachar: "] = "Auto crouch: ",
+    ["agachando"] = "crouching",
+    ["Nao foi possivel ativar: "] = "Could not enable: ",
+    [" Funcao desativada automaticamente."] = " Feature turned off automatically.",
+    ["A verificacao de "] = "The check for ",
+    [" falhou ("] = " failed (",
+    ["); a funcao foi mantida ligada."] = "); the feature was kept on.",
+    ["Falta: "] = "Missing: ",
+    ["Auto pular"] = "Auto jump",
+    ["No Recoil"] = "No Recoil",
+    ["No Spread"] = "No Spread",
+    ["mousemoverel ausente: metodo de mira trocado para Camera"] = "mousemoverel missing: aim method switched to Camera",
+    ["Events.Shoot nao encontrado: usando clique simulado"] = "Events.Shoot not found: using simulated click",
+    ["sem funcao de clique: usando o remote Events.Shoot"] = "no click function: using the Events.Shoot remote",
+    ["sem tecla virtual: metodo trocado para Humanoid.Jump"] = "no virtual key: method switched to Humanoid.Jump",
+    ["Alvos (valem para Chams, ESP, Aimbot e Auto Shoot)"] = "Targets (apply to Chams, ESP, Aimbot and Auto Shoot)",
+    ["Incluir jogadores"] = "Include players",
+    ["Incluir bots (Workspace.DeathmatchBots)"] = "Include bots (Workspace.DeathmatchBots)",
+    ["Bots detectados: 0"] = "Bots detected: 0",
+    ["Bots detectados: "] = "Bots detected: ",
+    ["Ativar chams"] = "Enable chams",
+    ["Mostrar aliados"] = "Show allies",
+    ["Ver atraves da parede"] = "See through walls",
+    ["Distancia maxima"] = "Max distance",
+    [" m"] = " m",
+    ["Cores"] = "Colors",
+    ["Preenchimento (inimigo)"] = "Fill (enemy)",
+    ["Preenchimento (aliado)"] = "Fill (ally)",
+    ["Contorno"] = "Outline",
+    ["Transparencia do preenchimento"] = "Fill transparency",
+    ["Transparencia do contorno"] = "Outline transparency",
+    ["Cor por visibilidade"] = "Color by visibility",
+    ["Colorir por visivel / escondido"] = "Color by visible / hidden",
+    ["Cor quando visivel"] = "Color when visible",
+    ["Cor quando escondido"] = "Color when hidden",
+    ["Ativar ESP"] = "Enable ESP",
+    ["Caixa e barras"] = "Box and bars",
+    ["Caixa (box)"] = "Box",
+    ["Cor da caixa (inimigo)"] = "Box color (enemy)",
+    ["Cor da caixa (aliado)"] = "Box color (ally)",
+    ["Espessura da caixa"] = "Box thickness",
+    ["Cor da caixa por visibilidade"] = "Box color by visibility",
+    ["Barra de vida"] = "Health bar",
+    ["Barra de escudo"] = "Shield bar",
+    ["Escudo maximo (escala da barra)"] = "Max shield (bar scale)",
+    ["Textos"] = "Texts",
+    ["Nome"] = "Name",
+    ["Agente"] = "Agent",
+    ["Arma equipada"] = "Equipped weapon",
+    ["Loadout (Primary / Secondary / Knife)"] = "Loadout (Primary / Secondary / Knife)",
+    ["Mostrar quem carrega o SPIKE"] = "Show who carries the SPIKE",
+    ["Escudo (tem ou nao + valor)"] = "Shield (yes/no + value)",
+    ["Vida (numero)"] = "Health (number)",
+    ["Distancia"] = "Distance",
+    ["Tamanho do texto"] = "Text size",
+    ["Cor do texto"] = "Text color",
+    ["Tracers"] = "Tracers",
+    ["Linhas ate os jogadores"] = "Lines to players",
+    ["Origem da linha"] = "Line origin",
+    ["Baixo"] = "Bottom",
+    ["Centro"] = "Center",
+    ["Cima"] = "Top",
+    ["Espessura da linha"] = "Line thickness",
+    ["Cor da linha"] = "Line color",
+    ["Ativar aimbot"] = "Enable aimbot",
+    ["Tecla"] = "Key",
+    ["Modo da tecla"] = "Key mode",
+    ["Segurar"] = "Hold",
+    ["Alternar"] = "Toggle",
+    ["Metodo de mira"] = "Aim method",
+    ["Mouse"] = "Mouse",
+    ["Parte do corpo"] = "Body part",
+    ["Head"] = "Head",
+    ["Torso"] = "Torso",
+    ["Mais proxima"] = "Closest",
+    ["Lock (travar no alvo)"] = "Lock (stick to target)",
+    ["Soltar o lock se perder visao"] = "Release lock if target is hidden",
+    ["Alvo"] = "Target",
+    ["Prioridade"] = "Priority",
+    ["Mira"] = "Crosshair",
+    ["Vida"] = "Health",
+    ["Ignorar aliados (mirar so inimigos)"] = "Ignore allies (aim at enemies only)",
+    ["Wall check (so alvo visivel)"] = "Wall check (visible targets only)",
+    ["Smoke nao bloqueia o wall check"] = "Smoke does not block wall check",
+    ["FOV"] = "FOV",
+    ["FOV (graus)"] = "FOV (degrees)",
+    [" graus"] = " deg",
+    ["Mostrar circulo do FOV"] = "Show FOV circle",
+    ["Cor do circulo"] = "Circle color",
+    ["Centro do FOV"] = "FOV center",
+    ["Suavizacao e ajustes"] = "Smoothing and tuning",
+    ["Suavizacao (0 = instantaneo)"] = "Smoothing (0 = instant)",
+    ["Passo maximo por frame (px)"] = "Max step per frame (px)",
+    ["Zona morta (px)"] = "Dead zone (px)",
+    ["Forca horizontal"] = "Horizontal strength",
+    [" %"] = " %",
+    ["Forca vertical"] = "Vertical strength",
+    ["Tremor (humanizar, px)"] = "Jitter (humanize, px)",
+    ["Predicao (segundos)"] = "Prediction (seconds)",
+    ["Sempre ativo"] = "Always on",
+    ["Botao direito"] = "Right mouse button",
+    ["Botao esquerdo"] = "Left mouse button",
+    ["Botao do meio"] = "Middle mouse button",
+    ["Alt esquerdo"] = "Left Alt",
+    ["Shift esquerdo"] = "Left Shift",
+    ["Ctrl esquerdo"] = "Left Ctrl",
+    ["Clica sozinho (ou dispara o remote) quando ha alvo. Sem hook no Shoot."] = "Clicks by itself (or fires the remote) when there is a target. No hook on Shoot.",
+    ["Ativar auto shoot"] = "Enable auto shoot",
+    ["Modo"] = "Mode",
+    ["Por FOV"] = "By FOV",
+    ["360"] = "360",
+    ["Por FOV: atira quando o inimigo esta dentro do circulo. 360: atira em qualquer inimigo visivel no mundo 3D."] = "By FOV: shoots when the enemy is inside the circle. 360: shoots at any enemy visible in the 3D world.",
+    ["Delay entre tiros"] = "Delay between shots",
+    [" ms"] = " ms",
+    ["Variacao aleatoria do delay"] = "Random delay variation",
+    ["Delay de reacao (alvo precisa ficar assim por)"] = "Reaction delay (target must stay valid for)",
+    ["So atirar com mouse travado no centro (evita clicar no menu)"] = "Only shoot with mouse locked to center (avoids clicking the menu)",
+    ["Remote"] = "Remote",
+    ["Usar remote (Events.Shoot) em vez de clicar"] = "Use remote (Events.Shoot) instead of clicking",
+    ["Remote: envia o tiro direto no alvo (parte + ponto de acerto + origem da camera), respeitando a cadencia da arma e a municao. Nao gira a camera."] = "Remote: sends the shot straight at the target (part + hit point + camera origin), respecting weapon fire rate and ammo. Does not rotate the camera.",
+    ["Timestamp do tiro"] = "Shot timestamp",
+    ["Servidor"] = "Server",
+    ["tick()"] = "tick()",
+    ["FOV (modo Por FOV)"] = "FOV (By FOV mode)",
+    ["Modo 360"] = "360 mode",
+    ["Girar a camera para o alvo antes de atirar"] = "Rotate camera to target before shooting",
+    ["Suavidade da rotacao (0 = instantaneo)"] = "Rotation smoothness (0 = instant)",
+    ["Tolerancia de mira para disparar"] = "Aim tolerance to fire",
+    ["Paredes"] = "Walls",
+    ["Checagem de parede"] = "Wall check",
+    ["So visivel"] = "Visible only",
+    ["Ignorar"] = "Ignore",
+    ["Status"] = "Status",
+    ["Ignorar aliados (so inimigos)"] = "Ignore allies (enemies only)",
+    ["Estado: desligado | tiros: 0"] = "State: off | shots: 0",
+    ["Remote: -"] = "Remote: -",
+    ["Estado: %s | cliques: %d | clique: %s"] = "State: %s | clicks: %d | click: %s",
+    ["Remote: %d enviados | ultimo erro: %s"] = "Remote: %d sent | last error: %s",
+    ["Terceira pessoa"] = "Third person",
+    ["Distancia da camera"] = "Camera distance",
+    [" studs"] = " studs",
+    ["Deslocamento lateral"] = "Side offset",
+    ["Deslocamento vertical"] = "Vertical offset",
+    ["Colisao da camera com paredes"] = "Camera collision with walls",
+    ["Mostrar o corpo do personagem"] = "Show character body",
+    ["Esconder bracos/arma da primeira pessoa"] = "Hide first-person arms/weapon",
+    ["Tecla para alternar terceira pessoa"] = "Key to toggle third person",
+    ["Aviso: o servidor aceita tiros com origem ate ~7 studs do personagem. Mantenha a distancia abaixo disso."] = "Warning: the server accepts shots with origin up to ~7 studs from the character. Keep the distance below that.",
+    ["Campo de visao"] = "Field of view",
+    ["Alterar FOV"] = "Change FOV",
+    ["Movimento"] = "Movement",
+    ["A velocidade altera os parametros que o jogo le no seu cliente (ReplicatedStorage.Speed). O servidor pode ter limites proprios."] = "Speed changes the values the game reads on your client (ReplicatedStorage.Speed). The server may have its own limits.",
+    ["Alterar velocidade de movimento"] = "Change movement speed",
+    ["Velocidade de movimento (studs/s)"] = "Movement speed (studs/s)",
+    ["Velocidade original da arma atual: -"] = "Original speed of current weapon: -",
+    ["Velocidade original da arma atual: "] = "Original speed of current weapon: ",
+    ["%.1f studs/s"] = "%.1f studs/s",
+    ["Auto pular (o jogo ja faz bhop segurando o pulo)"] = "Auto jump (the game already does bhop while holding jump)",
+    ["Auto pular (segura o pulo por voce)"] = "Auto jump (holds jump for you)",
+    ["Ativar com"] = "Activate with",
+    ["Metodo"] = "Method",
+    ["Tecla virtual"] = "Virtual key",
+    ["Humanoid.Jump"] = "Humanoid.Jump",
+    ["So pular quando estiver se movendo"] = "Only jump while moving",
+    ["Intervalo entre pulos (so metodo Humanoid.Jump)"] = "Interval between jumps (Humanoid.Jump method only)",
+    ["Auto pular: desligado"] = "Auto jump: off",
+    ["Auto pular: "] = "Auto jump: ",
+    [" | velocidade: "] = " | speed: ",
+    ["Spin Bot e Anti-Aim giram so o corpo (HumanoidRootPart). A camera nao e alterada, em 1a ou 3a pessoa."] = "Spin Bot and Anti-Aim only rotate the body (HumanoidRootPart). The camera is untouched, in 1st or 3rd person.",
+    ["Spin Bot"] = "Spin Bot",
+    ["Ativar spin bot"] = "Enable spin bot",
+    ["Velocidade"] = "Speed",
+    [" graus/s"] = " deg/s",
+    ["Direcao"] = "Direction",
+    ["Horario"] = "Clockwise",
+    ["Anti-horario"] = "Counter-clockwise",
+    ["Alternando"] = "Alternating",
+    ["Alternar direcao a cada"] = "Switch direction every",
+    [" s"] = " s",
+    ["Variacao aleatoria da velocidade"] = "Random speed variation",
+    ["Quando girar"] = "When to spin",
+    ["Sempre"] = "Always",
+    ["Somente parado"] = "Only standing still",
+    ["Somente movendo"] = "Only while moving",
+    ["Pausar enquanto atiro (botao esquerdo)"] = "Pause while shooting (left button)",
+    ["Giro em pitch (experimental)"] = "Pitch spin (experimental)",
+    ["Giro em roll (experimental)"] = "Roll spin (experimental)",
+    ["Anti-Aim"] = "Anti-Aim",
+    ["Ativar anti-aim"] = "Enable anti-aim",
+    ["Estatico"] = "Static",
+    ["Jitter"] = "Jitter",
+    ["Oscilar"] = "Sweep",
+    ["Aleatorio"] = "Random",
+    ["Direcao base do corpo"] = "Base body direction",
+    ["Atras"] = "Behind",
+    ["Esquerda"] = "Left",
+    ["Direita"] = "Right",
+    ["Frente"] = "Front",
+    ["Personalizado"] = "Custom",
+    ["Angulo personalizado"] = "Custom angle",
+    ["Alcance (jitter / oscilar / aleatorio)"] = "Range (jitter / sweep / random)",
+    ["Frequencia (jitter / aleatorio)"] = "Frequency (jitter / random)",
+    [" Hz"] = " Hz",
+    ["Velocidade da oscilacao"] = "Sweep speed",
+    ["Direcao relativa a camera (desligado = fixa no mundo)"] = "Direction relative to camera (off = fixed in world)",
+    ["Inclinacao (pitch, experimental)"] = "Tilt (pitch, experimental)",
+    ["Nenhum"] = "None",
+    ["Intensidade da inclinacao"] = "Tilt intensity",
+    ["Roll fixo (experimental)"] = "Fixed roll (experimental)",
+    ["Quando aplicar"] = "When to apply",
+    ["Estado: desligado"] = "State: off",
+    ["Estado: "] = "State: ",
+    ["Com os dois ligados, o spin soma por cima do anti-aim. Se o jogo girar o personagem pelo servidor, o efeito pode nao aparecer: rode o Diagnostico."] = "With both on, the spin adds on top of the anti-aim. If the game rotates the character server-side the effect may not show: run Diagnostics.",
+    ["Recuo e espalhamento (patch no GunConfig, so no seu cliente)"] = "Recoil and spread (GunConfig patch, your client only)",
+    ["No Recoil (sem recuo)"] = "No Recoil",
+    ["No Spread (sem espalhamento)"] = "No Spread",
+    ["Se o recuo visual persistir, rode o Diagnostico e me mande o log (WeaponModule nao foi lido)."] = "If visual recoil persists, run Diagnostics and send me the log (WeaponModule was not read).",
+    ["Cadencia de tiro (Rate do GunConfig)"] = "Fire rate (GunConfig Rate)",
+    ["Alterar cadencia de tiro"] = "Change fire rate",
+    ["Multiplicador da cadencia"] = "Fire rate multiplier",
+    ["x"] = "x",
+    ["O servidor limita a cadencia (RateSlack 0.85 e rajada de 3 tiros em 0.25 s). Acima de ~1.15x o cliente atira mais rapido mas o servidor pode ignorar os tiros extras."] = "The server limits fire rate (RateSlack 0.85 and a 3-shot burst per 0.25 s). Above ~1.15x the client fires faster but the server may ignore the extra shots.",
+    ["Smoke"] = "Smoke",
+    ["Remover smoke"] = "Remove smoke",
+    ["Incluir paredes de habilidade (BlocksSight)"] = "Include ability walls (BlocksSight)",
+    ["Efeitos de tela"] = "Screen effects",
+    ["Remover flash (cegueira)"] = "Remove flash (blind)",
+    ["Remover blur / desfoque"] = "Remove blur",
+    ["Remover color correction / bloom / sunrays"] = "Remove color correction / bloom / sunrays",
+    ["Perfis de configuracao"] = "Config profiles",
+    ["Seu executor nao tem writefile/readfile/listfiles: salvar em arquivo indisponivel. Use Exportar/Importar pela area de transferencia."] = "Your executor lacks writefile/readfile/listfiles: saving to file is unavailable. Use Export/Import via clipboard.",
+    ["Nome do perfil"] = "Profile name",
+    ["Perfis salvos"] = "Saved profiles",
+    ["Salvar perfil (com o nome acima)"] = "Save profile (with the name above)",
+    ["Sem acesso a arquivos neste executor"] = "No file access in this executor",
+    ["Salvo: "] = "Saved: ",
+    ["Falha ao salvar: "] = "Failed to save: ",
+    ["Carregar perfil selecionado"] = "Load selected profile",
+    ["Perfil nao encontrado: "] = "Profile not found: ",
+    ["Falha ao ler"] = "Failed to read",
+    ["Carregado: "] = "Loaded: ",
+    [" opcoes)"] = " options)",
+    ["Excluir perfil selecionado"] = "Delete selected profile",
+    ["Selecione um perfil"] = "Select a profile",
+    ["Excluido: "] = "Deleted: ",
+    ["Executor sem delfile"] = "Executor has no delfile",
+    ["Atualizar lista"] = "Refresh list",
+    ["Iniciar com perfil"] = "Start with profile",
+    ["Carregar o perfil selecionado automaticamente ao executar"] = "Auto-load the selected profile on execute",
+    ["Sem acesso a arquivos"] = "No file access",
+    ["Auto-carregar: "] = "Auto-load: ",
+    ["Desligar auto-carregar"] = "Turn off auto-load",
+    ["Auto-carregar desligado"] = "Auto-load off",
+    ["Area de transferencia"] = "Clipboard",
+    ["Exportar configuracao atual (copiar JSON)"] = "Export current config (copy JSON)",
+    ["JSON copiado"] = "JSON copied",
+    ["Executor sem setclipboard"] = "Executor has no setclipboard",
+    ["Importar (cole o JSON e tecle Enter)"] = "Import (paste JSON and press Enter)",
+    ["Importado ("] = "Imported (",
+    ["arquivo invalido"] = "invalid file",
+    ["Verificacao dos caminhos do jogo"] = "Game path check",
+    ["Rodar diagnostico (copia o relatorio)"] = "Run diagnostics (copies the report)",
+    ["Relatorio no console (F9)"] = "Report in console (F9)",
+    [" e na area de transferencia"] = " and in the clipboard",
+    ["Descarregar script (remove tudo)"] = "Unload script (removes everything)",
+    ["desligado"] = "off",
+    ["ativo"] = "active",
+    ["aguardando"] = "waiting",
+    ["voce morto"] = "you are dead",
+    ["faca equipada"] = "knife equipped",
+    ["sem alvo"] = "no target",
+    ["reacao"] = "reaction",
+    ["mouse nao travado"] = "mouse not locked",
+    ["delay"] = "delay",
+    ["atirando"] = "shooting",
+    ["falha no clique"] = "click failed",
+    ["mirando"] = "aiming",
+    ["pausado"] = "paused",
+    ["spin"] = "spin",
+    ["anti-aim"] = "anti-aim",
+    ["spin + anti-aim"] = "spin + anti-aim",
+    ["Carregado. Menu: RightShift. Rode o Diagnostico na partida."] = "Loaded. Menu: RightShift. Run Diagnostics in a match.",
+    ["Chams | ESP | Aim | Auto Shoot | Visuais"] = "Chams | ESP | Aim | Auto Shoot | Visuals",
+    ["Idioma / Language"] = "Idioma / Language",
+}
+
+local function T(s)
+    if C.Lang == "English" then
+        local e = EN[s]
+        if e ~= nil then return e end
+    end
+    return s
+end
+
+local Rayfield
+local UI = {}
+local GEN = 0
+local rebuildMenu
+
+local function notifyT(o)
+    o.Title = T(o.Title)
+    o.Content = T(o.Content)
+    return Rayfield:Notify(o)
+end
+
+local function wrapTab(tab)
+    local w = {}
+    function w:CreateSection(n) return tab:CreateSection(T(n)) end
+    function w:CreateLabel(t) return tab:CreateLabel(T(t)) end
+    function w:CreateButton(o) o.Name = T(o.Name) return tab:CreateButton(o) end
+    function w:CreateToggle(o) o.Name = T(o.Name) return tab:CreateToggle(o) end
+    function w:CreateSlider(o)
+        o.Name = T(o.Name)
+        if o.Suffix then o.Suffix = T(o.Suffix) end
+        return tab:CreateSlider(o)
+    end
+    function w:CreateColorPicker(o) o.Name = T(o.Name) return tab:CreateColorPicker(o) end
+    function w:CreateInput(o)
+        o.Name = T(o.Name)
+        if o.PlaceholderText then o.PlaceholderText = T(o.PlaceholderText) end
+        return tab:CreateInput(o)
+    end
+    function w:CreateKeybind(o) o.Name = T(o.Name) return tab:CreateKeybind(o) end
+    function w:CreateDropdown(o) o.Name = T(o.Name) return tab:CreateDropdown(o) end
+    return w
+end
+
+local HttpService = game:GetService("HttpService")
+local CFG_DIR = "VantageMemesense"
+local CFG = { name = "padrao", list = {}, sel = nil }
+local fsOk = writefile and readfile and isfile and makefolder and isfolder and listfiles and true or false
+
+local function saveLang()
+    if fsOk then
+        pcall(function()
+            if not isfolder(CFG_DIR) then makefolder(CFG_DIR) end
+            writefile(CFG_DIR .. "/_lang.txt", C.Lang)
+        end)
+    end
+end
+local function loadLang()
+    if fsOk and isfile(CFG_DIR .. "/_lang.txt") then
+        local ok, v = pcall(readfile, CFG_DIR .. "/_lang.txt")
+        if ok and (v == "Portugues" or v == "English") then C.Lang = v end
+    end
+end
+
+local function cfgPath(n)
+    return CFG_DIR .. "/" .. tostring(n):gsub("[^%w_%-]", "_") .. ".json"
+end
+local function cfgEnsure()
+    if not fsOk then return false end
+    if not isfolder(CFG_DIR) then pcall(makefolder, CFG_DIR) end
+    return isfolder(CFG_DIR)
+end
+local guardAll   -- definido mais abaixo (verificacao de requisitos)
+local function cfgEncode()
+    local t = {}
+    for k, v in pairs(C) do
+        if k ~= "Dead" then
+            local tv = typeof(v)
+            if tv == "Color3" then t[k] = { __c = { v.R, v.G, v.B } }
+            elseif tv == "number" or tv == "boolean" or tv == "string" then t[k] = v end
+        end
+    end
+    return HttpService:JSONEncode(t)
+end
+local function cfgApply(json)
+    local ok, t = pcall(function() return HttpService:JSONDecode(json) end)
+    if not ok or type(t) ~= "table" then return false, "arquivo invalido" end
+    local n = 0
+    local langChanged = false
+    for k, v in pairs(t) do
+        local cur = C[k]
+        if k == "Lang" then
+            if (v == "Portugues" or v == "English") and v ~= C.Lang then
+                C.Lang = v
+                langChanged = true
+            end
+        elseif cur ~= nil and k ~= "Dead" then
+            local val
+            if typeof(cur) == "Color3" and type(v) == "table" and type(v.__c) == "table" then
+                val = Color3.new(v.__c[1], v.__c[2], v.__c[3])
+            elseif type(v) == type(cur) then
+                val = v
+            end
+            if val ~= nil then
+                C[k] = val
+                local u = UI[k]
+                if u then
+                    pcall(function()
+                        if u.kind == "dropdown" then u.el:Set({ T(val) }) else u.el:Set(val) end
+                    end)
+                end
+                C[k] = val
+                n = n + 1
+            end
+        end
+    end
+    refreshAimOpts()
+    pcall(modsRefresh)
+    post(guardAll)
+    if langChanged then
+        saveLang()
+        task.defer(function() rebuildMenu() end)
+    end
+    return true, n
+end
+local function cfgList()
+    local out = {}
+    if cfgEnsure() then
+        local ok, files = pcall(listfiles, CFG_DIR)
+        if ok and type(files) == "table" then
+            for _, f in ipairs(files) do
+                local n = tostring(f):match("([^/\\]+)%.json$")
+                if n then out[#out + 1] = n end
+            end
+        end
+    end
+    table.sort(out)
+    return out
+end
+
+--------------------------------------------------------------------------
+-- Verificacao de requisitos ao ativar funcoes (guard)
+--  - cada funcao tem uma checagem do que precisa (funcoes do executor, remotes, modulos)
+--  - se faltar algo e nao houver fallback, avisa o que precisa e desativa a funcao sozinha
+--  - se houver fallback (outro metodo), troca e avisa; erro na propria checagem NAO desativa nada
+--------------------------------------------------------------------------
+local function setCfg(k, val)
+    if C[k] == nil then return end
+    C[k] = val
+    local u = UI[k]
+    if u then
+        pcall(function()
+            if u.kind == "dropdown" then u.el:Set({ T(val) }) else u.el:Set(val) end
+        end)
+    end
+    C[k] = val
+end
+
+local FEATURE_NAME = {
+    ChamsOn = "Chams", EspOn = "ESP", AimOn = "Aimbot", AsOn = "Auto Shoot", SilentOn = "Silent Aim",
+    NoRecoil = "No Recoil", NoSpread = "No Spread", FireRateOn = "Alterar cadencia de tiro",
+    SpeedOn = "Alterar velocidade de movimento", AcOn = "Auto agachar", AutoJump = "Auto pular",
+    TpOn = "Terceira pessoa", FovOn = "Alterar FOV",
+}
+
+local function hasFn(f) return type(f) == "function" end
+
+local function gunReq()
+    local mods = ReplicatedStorage:FindFirstChild("Modules")
+    local ms = mods and mods:FindFirstChild("GunConfig")
+    if not ms then return { "ReplicatedStorage.Modules.GunConfig" } end
+    local ok = pcall(require, ms)
+    if not ok then return { "require(GunConfig) (o executor nao conseguiu carregar o modulo)" } end
+    return {}
+end
+
+local REQ = {}
+REQ.ChamsOn = function()
+    local ok = pcall(function() local h = Instance.new("Highlight") h:Destroy() end)
+    if ok then return {} end
+    return { "Instance.new('Highlight')" }
+end
+REQ.EspOn = function()
+    local m = {}
+    if not cam() then m[#m + 1] = "Workspace.CurrentCamera" end
+    if not Overlay or not Overlay.Parent then m[#m + 1] = "ScreenGui em gethui()/CoreGui" end
+    return m
+end
+REQ.AimOn = function()
+    if not cam() then return { "Workspace.CurrentCamera" } end
+    if C.AimMethod == "Mouse" and not hasFn(mousemoverel) then
+        setCfg("AimMethod", "Camera")
+        return {}, "mousemoverel ausente: metodo de mira trocado para Camera"
+    end
+    return {}
+end
+REQ.AsOn = function()
+    local canClick = hasFn(mouse1click) or (hasFn(mouse1press) and hasFn(mouse1release)) or (getVIM() and true or false)
+    local canRemote = findShoot() ~= nil
+    if C.AsRemote then
+        if not canRemote then
+            if canClick then
+                setCfg("AsRemote", false)
+                return {}, "Events.Shoot nao encontrado: usando clique simulado"
+            end
+            return { "Events.Shoot (remote)", "mouse1click ou VirtualInputManager" }
+        end
+    else
+        if not canClick then
+            if canRemote then
+                setCfg("AsRemote", true)
+                return {}, "sem funcao de clique: usando o remote Events.Shoot"
+            end
+            return { "mouse1click (ou mouse1press + mouse1release, ou VirtualInputManager)", "Events.Shoot (remote)" }
+        end
+    end
+    return {}
+end
+REQ.SilentOn = function()
+    local ok, notes = saEnable()
+    if ok then
+        local info = "metodo ativo: " .. SA.method
+        if #notes > 0 then info = info .. " (fallback; falhou: " .. table.concat(notes, " | ") .. ")" end
+        if SA.method == "Mira ao atirar" then
+            info = info .. ". O silent aim real nao funciona neste executor (precisa de hookmetamethod + getnamecallmethod, ou hookfunction); usando a camera ao atirar"
+        end
+        return {}, info
+    end
+    local m = {}
+    for _, n in ipairs(notes) do m[#m + 1] = n end
+    m[#m + 1] = "precisa de: hookmetamethod + getnamecallmethod, ou hookfunction"
+    return m
+end
+REQ.NoRecoil = gunReq
+REQ.NoSpread = gunReq
+REQ.FireRateOn = gunReq
+REQ.SpeedOn = function()
+    if ReplicatedStorage:FindFirstChild("Speed") then return {} end
+    return { "ReplicatedStorage.Speed (entre numa partida)" }
+end
+REQ.AcOn = function()
+    if (getVIM() and true or false) or hasFn(keypress) then return {} end
+    return { "VirtualInputManager ou keypress/keyrelease" }
+end
+REQ.AutoJump = function()
+    if (getVIM() and true or false) or hasFn(keypress) then return {} end
+    if C.AjMethod ~= "Humanoid.Jump" then
+        setCfg("AjMethod", "Humanoid.Jump")
+        return {}, "sem tecla virtual: metodo trocado para Humanoid.Jump"
+    end
+    return {}
+end
+REQ.TpOn = function()
+    if cam() then return {} end
+    return { "Workspace.CurrentCamera" }
+end
+REQ.FovOn = REQ.TpOn
+
+disableFeature = function(key, reason)
+    setCfg(key, false)
+    if key == "SilentOn" then saDisable() end
+    if notifyT then
+        notifyT({
+            Title = "Vantage Memesense",
+            Content = T("Nao foi possivel ativar: ") .. T(FEATURE_NAME[key] or key) .. ". " .. tostring(reason)
+                .. T(" Funcao desativada automaticamente."),
+            Duration = 9,
+        })
+    end
+end
+
+local function guard(key)
+    if C.Dead or not C[key] then return end
+    local f = REQ[key]
+    if not f then return end
+    local ok, missing, info = pcall(f)
+    if not ok then
+        if notifyT then
+            notifyT({ Title = "Vantage Memesense",
+                Content = T("A verificacao de ") .. T(FEATURE_NAME[key] or key) .. T(" falhou (") .. tostring(missing)
+                    .. T("); a funcao foi mantida ligada."), Duration = 7 })
+        end
+        return
+    end
+    if type(missing) == "table" and #missing > 0 then
+        disableFeature(key, T("Falta: ") .. table.concat(missing, "; ") .. ".")
+        return
+    end
+    if info and notifyT then
+        notifyT({ Title = "Vantage Memesense", Content = T(FEATURE_NAME[key] or key) .. ": " .. T(info), Duration = 7 })
+    end
+end
+guardAll = function()
+    for key in pairs(REQ) do
+        if C[key] then guard(key) end
+    end
+end
+
+local function buildMenu()
+    local gen = GEN
+    local Window = Rayfield:CreateWindow({
+        Name = "Vantage Memesense",
+        LoadingTitle = "Vantage Memesense",
+        LoadingSubtitle = T("Chams | ESP | Aim | Auto Shoot | Visuais"),
+        ToggleUIKeybind = Enum.KeyCode.RightShift,
+        ConfigurationSaving = { Enabled = false },
+        KeySystem = false,
+    })
+
+    local function newTab(name) return wrapTab(Window:CreateTab(T(name), 4483362458)) end
+
+    local function toggle(tab, name, key, cb)
+        local el = tab:CreateToggle({
+            Name = name, CurrentValue = C[key], Flag = "vh_" .. key,
+            Callback = function(v)
+                C[key] = v
+                if cb then cb(v) end
+                if v and REQ[key] then post(function() guard(key) end) end
+            end,
+        })
+        UI[key] = { el = el, kind = "toggle" }
+        return el
+    end
+    local function slider(tab, name, key, min, max, inc, suffix, cb)
+        local el = tab:CreateSlider({
+            Name = name, Range = { min, max }, Increment = inc, Suffix = suffix or "",
+            CurrentValue = C[key], Flag = "vh_" .. key,
+            Callback = function(v)
+                C[key] = v
+                if cb then cb(v) end
+            end,
+        })
+        UI[key] = { el = el, kind = "slider" }
+        return el
+    end
+    local function color(tab, name, key, cb)
+        local el = tab:CreateColorPicker({
+            Name = name, Color = C[key], Flag = "vh_" .. key,
+            Callback = function(v)
+                C[key] = v
+                if cb then cb(v) end
+            end,
+        })
+        UI[key] = { el = el, kind = "color" }
+        return el
+    end
+    local function dropdown(tab, name, key, options, cb)
+        local disp, rev = {}, {}
+        for i, o in ipairs(options) do
+            local d = T(o)
+            disp[i] = d
+            rev[d] = o
+        end
+        local el = tab:CreateDropdown({
+            Name = name, Options = disp, CurrentOption = { T(C[key]) }, MultipleOptions = false,
+            Flag = "vh_" .. key,
+            Callback = function(o)
+                local d = pick(o)
+                C[key] = rev[d] or d
+                if cb then cb(C[key]) end
+            end,
+        })
+        UI[key] = { el = el, kind = "dropdown" }
+        return el
+    end
+
+    -- ============ Geral ============
+    local tGen = newTab("Geral")
+    tGen:CreateDropdown({
+        Name = "Idioma / Language", Options = { "Portugues", "English" }, CurrentOption = { C.Lang },
+        MultipleOptions = false, Flag = "vh_lang",
+        Callback = function(o)
+            local v = pick(o)
+            if (v == "Portugues" or v == "English") and v ~= C.Lang then
+                C.Lang = v
+                saveLang()
+                task.defer(function() rebuildMenu() end)
+            end
+        end,
+    })
+    tGen:CreateSection("Alvos (valem para Chams, ESP, Aimbot e Auto Shoot)")
+    toggle(tGen, "Incluir jogadores", "IncludePlayers")
+    toggle(tGen, "Incluir bots (Workspace.DeathmatchBots)", "IncludeBots")
+    local botLbl = tGen:CreateLabel("Bots detectados: 0")
+    task.spawn(function()
+        while not C.Dead and gen == GEN do
+            pcall(function()
+                local n = 0
+                for _ in pairs(BOTS) do n = n + 1 end
+                botLbl:Set(T("Bots detectados: ") .. n)
+            end)
+            task.wait(1)
+        end
+    end)
+
+    -- ============ Chams ============
+    local tCh = newTab("Chams")
+    tCh:CreateSection("Geral")
+    toggle(tCh, "Ativar chams", "ChamsOn")
+    toggle(tCh, "Mostrar aliados", "ChamsAllies")
+    toggle(tCh, "Ver atraves da parede", "ChamsWalls")
+    slider(tCh, "Distancia maxima", "ChamsMaxDist", 50, 3000, 10, " m")
+    tCh:CreateSection("Cores")
+    color(tCh, "Preenchimento (inimigo)", "ChamsFill")
+    color(tCh, "Preenchimento (aliado)", "ChamsAllyColor")
+    color(tCh, "Contorno", "ChamsOutline")
+    slider(tCh, "Transparencia do preenchimento", "ChamsFillT", 0, 1, 0.05)
+    slider(tCh, "Transparencia do contorno", "ChamsOutT", 0, 1, 0.05)
+    tCh:CreateSection("Cor por visibilidade")
+    toggle(tCh, "Colorir por visivel / escondido", "ChamsByVis")
+    color(tCh, "Cor quando visivel", "ChamsVisColor")
+    color(tCh, "Cor quando escondido", "ChamsHidColor")
+
+    -- ============ ESP ============
+    local tEsp = newTab("ESP")
+    tEsp:CreateSection("Geral")
+    toggle(tEsp, "Ativar ESP", "EspOn")
+    toggle(tEsp, "Mostrar aliados", "EspAllies")
+    slider(tEsp, "Distancia maxima", "EspMaxDist", 50, 3000, 10, " m")
+    tEsp:CreateSection("Caixa e barras")
+    toggle(tEsp, "Caixa (box)", "EspBox")
+    color(tEsp, "Cor da caixa (inimigo)", "EspBoxColor")
+    color(tEsp, "Cor da caixa (aliado)", "EspAllyColor")
+    slider(tEsp, "Espessura da caixa", "EspBoxThick", 0.5, 5, 0.5)
+    toggle(tEsp, "Cor da caixa por visibilidade", "EspVisColor")
+    color(tEsp, "Cor quando visivel", "EspVisColorVis")
+    toggle(tEsp, "Barra de vida", "EspHealthBar")
+    toggle(tEsp, "Barra de escudo", "EspShieldBar")
+    slider(tEsp, "Escudo maximo (escala da barra)", "ShieldMax", 25, 100, 5)
+    tEsp:CreateSection("Textos")
+    toggle(tEsp, "Nome", "EspName")
+    toggle(tEsp, "Agente", "EspAgent")
+    toggle(tEsp, "Arma equipada", "EspWeapon")
+    toggle(tEsp, "Loadout (Primary / Secondary / Knife)", "EspLoadout")
+    toggle(tEsp, "Mostrar quem carrega o SPIKE", "EspSpike")
+    toggle(tEsp, "Escudo (tem ou nao + valor)", "EspShield")
+    toggle(tEsp, "Vida (numero)", "EspHealthText")
+    toggle(tEsp, "Distancia", "EspDist")
+    slider(tEsp, "Tamanho do texto", "EspTextSize", 8, 24, 1)
+    color(tEsp, "Cor do texto", "EspTextColor")
+    tEsp:CreateSection("Tracers")
+    toggle(tEsp, "Linhas ate os jogadores", "EspTracer")
+    dropdown(tEsp, "Origem da linha", "EspTracerFrom", { "Baixo", "Centro", "Cima" })
+    slider(tEsp, "Espessura da linha", "EspTracerThick", 1, 5, 1)
+    color(tEsp, "Cor da linha", "EspTracerColor")
+
+    -- ============ Aimbot ============
+    local tAim = newTab("Aimbot")
+    tAim:CreateSection("Geral")
+    toggle(tAim, "Ativar aimbot", "AimOn", function() aimHeld = false locked = nil end)
+    dropdown(tAim, "Tecla", "AimKey", KEYNAMES, function() aimHeld = false locked = nil end)
+    dropdown(tAim, "Modo da tecla", "AimMode", { "Segurar", "Alternar" }, function() aimHeld = false locked = nil end)
+    dropdown(tAim, "Metodo de mira", "AimMethod", { "Mouse", "Camera" })
+    dropdown(tAim, "Parte do corpo", "AimPart", { "Head", "Torso", "Mais proxima" }, refreshAimOpts)
+    toggle(tAim, "Lock (travar no alvo)", "AimLock", function() locked = nil end)
+    toggle(tAim, "Soltar o lock se perder visao", "AimLockBreakWall")
+    tAim:CreateSection("Alvo")
+    dropdown(tAim, "Prioridade", "AimSort", { "Mira", "Distancia", "Vida" }, refreshAimOpts)
+    toggle(tAim, "Ignorar aliados (mirar so inimigos)", "AimTeam", refreshAimOpts)
+    toggle(tAim, "Wall check (so alvo visivel)", "AimWall", refreshAimOpts)
+    toggle(tAim, "Smoke nao bloqueia o wall check", "AimSmokeIgnore", refreshAimOpts)
+    slider(tAim, "Distancia maxima", "AimMaxDist", 20, 1500, 10, " m", refreshAimOpts)
+    tAim:CreateSection("FOV")
+    slider(tAim, "FOV (graus)", "AimFov", 1, 180, 1, " graus", refreshAimOpts)
+    toggle(tAim, "Mostrar circulo do FOV", "AimShowFov")
+    color(tAim, "Cor do circulo", "AimFovColor")
+    dropdown(tAim, "Centro do FOV", "AimFovOrigin", { "Centro", "Mouse" }, refreshAimOpts)
+    tAim:CreateSection("Suavizacao e ajustes")
+    slider(tAim, "Suavizacao (0 = instantaneo)", "AimSmooth", 0, 100, 1)
+    slider(tAim, "Passo maximo por frame (px)", "AimMaxStep", 5, 300, 5)
+    slider(tAim, "Zona morta (px)", "AimDead", 0, 20, 1)
+    slider(tAim, "Forca horizontal", "AimAxisX", 0, 100, 5, " %")
+    slider(tAim, "Forca vertical", "AimAxisY", 0, 100, 5, " %")
+    slider(tAim, "Tremor (humanizar, px)", "AimJitter", 0, 10, 0.5)
+    slider(tAim, "Predicao (segundos)", "AimPredict", 0, 0.3, 0.01)
+
+    -- ============ Silent Aim ============
+    local tSil = newTab("Silent Aim")
+    tSil:CreateSection("Geral")
+    tSil:CreateLabel("Intercepta o Events.Shoot que o proprio jogo envia e troca o alvo do tiro por um inimigo dentro do FOV. Nao cria tiro extra. Ao ativar, o metodo e validado e, se nao funcionar neste executor, a funcao se desativa sozinha avisando o que falta.")
+    toggle(tSil, "Ativar silent aim", "SilentOn", function(v)
+        if not v then post(saDisable) end
+    end)
+    dropdown(tSil, "Metodo do hook", "SilentMethod", { "Auto", "Namecall", "Hookfunction", "Mira ao atirar", "Remote direto" }, function()
+        if C.SilentOn then post(function() saDisable() guard("SilentOn") end) end
+    end)
+    tSil:CreateLabel("Auto: tenta Namecall, depois Hookfunction, depois Mira ao atirar (camera, sem hook). Remote direto envia um tiro extra ao clicar e so entra se voce escolher.")
+    tSil:CreateSection("Alvo")
+    dropdown(tSil, "Parte do corpo", "SilentPart", { "Head", "Torso", "Mais proxima" })
+    dropdown(tSil, "Prioridade", "SilentSort", { "Mira", "Distancia", "Vida" })
+    dropdown(tSil, "Checagem de parede", "SilentWall", { "So visivel", "Ignorar" })
+    toggle(tSil, "Ignorar aliados (so inimigos)", "SilentTeam")
+    slider(tSil, "Distancia maxima", "SilentMaxDist", 20, 1500, 10, " m")
+    slider(tSil, "Chance de acerto", "SilentHitChance", 1, 100, 1, " %")
+    tSil:CreateSection("FOV")
+    slider(tSil, "FOV (graus)", "SilentFov", 1, 180, 0.5, " graus")
+    toggle(tSil, "Mostrar circulo do FOV", "SilentShowFov")
+    color(tSil, "Cor do circulo", "SilentFovColor")
+    dropdown(tSil, "Centro do FOV", "SilentFovOrigin", { "Centro", "Mouse" })
+    tSil:CreateSection("Status")
+    local silLbl = tSil:CreateLabel("Estado: desligado")
+    local silLbl2 = tSil:CreateLabel("Trocas: 0 | erros: 0 | ultimo erro: -")
+    tSil:CreateButton({
+        Name = "Revalidar metodo agora",
+        Callback = function()
+            post(function()
+                saDisable()
+                if C.SilentOn then guard("SilentOn") end
+            end)
+        end,
+    })
+    task.spawn(function()
+        while not C.Dead and gen == GEN do
+            pcall(function()
+                silLbl:Set(T("Estado: ") .. T(SA.state) .. T(" | metodo: ") .. T(SA.method))
+                silLbl2:Set(T("Trocas: ") .. SA.hits .. T(" | erros: ") .. SA.errs .. T(" | ultimo erro: ") .. (SA.last ~= "-" and SA.last or "-"))
+            end)
+            task.wait(0.5)
+        end
+    end)
+
+    -- ============ Auto Shoot ============
+    local tAs = newTab("Auto Shoot")
+    tAs:CreateSection("Geral")
+    tAs:CreateLabel("Clica sozinho (ou dispara o remote) quando ha alvo. Sem hook no Shoot.")
+    toggle(tAs, "Ativar auto shoot", "AsOn")
+    dropdown(tAs, "Modo", "AsMode", { "Por FOV", "360" })
+    tAs:CreateLabel("Por FOV: atira quando o inimigo esta dentro do circulo. 360: atira em qualquer inimigo visivel no mundo 3D.")
+    slider(tAs, "Delay entre tiros", "AsDelay", 0, 1000, 5, " ms")
+    slider(tAs, "Variacao aleatoria do delay", "AsJitter", 0, 500, 5, " ms")
+    slider(tAs, "Delay de reacao (alvo precisa ficar assim por)", "AsReact", 0, 500, 5, " ms")
+    toggle(tAs, "So atirar com mouse travado no centro (evita clicar no menu)", "AsNeedLock")
+    tAs:CreateSection("Remote")
+    toggle(tAs, "Usar remote (Events.Shoot) em vez de clicar", "AsRemote")
+    tAs:CreateLabel("Remote: envia o tiro direto no alvo (parte + ponto de acerto + origem da camera), respeitando a cadencia da arma e a municao. Nao gira a camera.")
+    dropdown(tAs, "Timestamp do tiro", "AsTime", { "Servidor", "tick()" })
+    tAs:CreateSection("Alvo")
+    dropdown(tAs, "Parte do corpo", "AsPart", { "Head", "Torso", "Mais proxima" })
+    dropdown(tAs, "Prioridade", "AsSort", { "Mira", "Distancia", "Vida" })
+    toggle(tAs, "Ignorar aliados (so inimigos)", "AsTeam")
+    slider(tAs, "Distancia maxima", "AsMaxDist", 20, 1500, 10, " m")
+    tAs:CreateSection("FOV (modo Por FOV)")
+    slider(tAs, "FOV (graus)", "AsFov", 1, 90, 0.5, " graus")
+    toggle(tAs, "Mostrar circulo do FOV", "AsShowFov")
+    color(tAs, "Cor do circulo", "AsFovColor")
+    dropdown(tAs, "Centro do FOV", "AsFovOrigin", { "Centro", "Mouse" })
+    tAs:CreateSection("Modo 360")
+    toggle(tAs, "Girar a camera para o alvo antes de atirar", "AsAim360")
+    slider(tAs, "Suavidade da rotacao (0 = instantaneo)", "AsAimSmooth", 0, 30, 1)
+    slider(tAs, "Tolerancia de mira para disparar", "AsAimTol", 0.5, 15, 0.5, " graus")
+    tAs:CreateSection("Paredes")
+    dropdown(tAs, "Checagem de parede", "AsWall", { "So visivel", "Ignorar" })
+    tAs:CreateSection("Status")
+    local asLbl = tAs:CreateLabel("Estado: desligado | tiros: 0")
+    local rmLbl = tAs:CreateLabel("Remote: -")
+    task.spawn(function()
+        while not C.Dead and gen == GEN do
+            pcall(function()
+                asLbl:Set(T("Estado: %s | cliques: %d | clique: %s"):format(T(AS.state), AS.shots, AS.clickFn))
+                rmLbl:Set(T("Remote: %d enviados | ultimo erro: %s"):format(AS.sent, AS.remoteErr ~= "" and AS.remoteErr or "-"))
+            end)
+            task.wait(0.5)
+        end
+    end)
+
+    -- ============ Camera ============
+    local tMov = newTab("Camera")
+    tMov:CreateSection("Terceira pessoa")
+    local tpToggle = toggle(tMov, "Terceira pessoa", "TpOn", function(v)
+        if not v then pcall(tpRestoreCam) end
+    end)
+    slider(tMov, "Distancia da camera", "TpDist", 0, 20, 0.5, " studs")
+    slider(tMov, "Deslocamento lateral", "TpX", -8, 8, 0.25, " studs")
+    slider(tMov, "Deslocamento vertical", "TpY", -4, 8, 0.25, " studs")
+    toggle(tMov, "Colisao da camera com paredes", "TpCollide")
+    toggle(tMov, "Mostrar o corpo do personagem", "TpBody")
+    toggle(tMov, "Esconder bracos/arma da primeira pessoa", "TpHideArms")
+    tMov:CreateKeybind({
+        Name = "Tecla para alternar terceira pessoa", CurrentKeybind = "V", HoldToInteract = false, Flag = "vh_tpkey",
+        Callback = function() pcall(function() tpToggle:Set(not C.TpOn) end) end,
+    })
+    tMov:CreateLabel("Aviso: o servidor aceita tiros com origem ate ~7 studs do personagem. Mantenha a distancia abaixo disso.")
+    tMov:CreateSection("Campo de visao")
+    toggle(tMov, "Alterar FOV", "FovOn")
+    slider(tMov, "FOV", "FovVal", 50, 120, 1)
+
+    -- ============ Spin Bot / Anti-Aim ============
+    local tBody = newTab("Spin, Anti-Aim e Movimento")
+    tBody:CreateSection("Movimento")
+    tBody:CreateLabel("A velocidade altera os parametros que o jogo le no seu cliente (ReplicatedStorage.Speed). O servidor pode ter limites proprios.")
+    toggle(tBody, "Alterar velocidade de movimento", "SpeedOn", modsRefresh)
+    slider(tBody, "Velocidade de movimento (studs/s)", "SpeedVal", 1, 300, 1, "", modsRefresh)
+    local spdLbl = tBody:CreateLabel("Velocidade original da arma atual: -")
+    tBody:CreateSection("Auto pular (o jogo ja faz bhop segurando o pulo)")
+    toggle(tBody, "Auto pular (segura o pulo por voce)", "AutoJump")
+    dropdown(tBody, "Ativar com", "AjKey", KEYNAMES)
+    dropdown(tBody, "Metodo", "AjMethod", { "Tecla virtual", "Humanoid.Jump" })
+    toggle(tBody, "So pular quando estiver se movendo", "AjOnlyMoving")
+    slider(tBody, "Intervalo entre pulos (so metodo Humanoid.Jump)", "AjInterval", 0, 1000, 10, " ms")
+    local ajLbl = tBody:CreateLabel("Auto pular: desligado")
+    task.spawn(function()
+        while not C.Dead and gen == GEN do
+            pcall(function()
+                ajLbl:Set(T("Auto pular: ") .. T(AJ.state) .. T(" | velocidade: ") .. T(MV.state))
+                local o = origSpeedOf(weaponOf(LP))
+                spdLbl:Set(T("Velocidade original da arma atual: ") .. (o and string.format("%.1f studs/s", o) or "-"))
+            end)
+            task.wait(0.5)
+        end
+    end)
+    tBody:CreateLabel("Spin Bot e Anti-Aim giram so o corpo (HumanoidRootPart). A camera nao e alterada, em 1a ou 3a pessoa.")
+    tBody:CreateSection("Spin Bot")
+    toggle(tBody, "Ativar spin bot", "SpinOn")
+    slider(tBody, "Velocidade", "SpinSpeed", 30, 3600, 10, " graus/s")
+    dropdown(tBody, "Direcao", "SpinDir", { "Horario", "Anti-horario", "Alternando" })
+    slider(tBody, "Alternar direcao a cada", "SpinFlip", 0.1, 5, 0.1, " s")
+    slider(tBody, "Variacao aleatoria da velocidade", "SpinVar", 0, 100, 1, " %")
+    dropdown(tBody, "Quando girar", "SpinWhen", { "Sempre", "Somente parado", "Somente movendo" })
+    toggle(tBody, "Pausar enquanto atiro (botao esquerdo)", "SpinPauseShoot")
+    slider(tBody, "Giro em pitch (experimental)", "SpinPitchSpeed", 0, 1440, 10, " graus/s")
+    slider(tBody, "Giro em roll (experimental)", "SpinRollSpeed", 0, 1440, 10, " graus/s")
+    tBody:CreateSection("Anti-Aim")
+    toggle(tBody, "Ativar anti-aim", "AaOn")
+    dropdown(tBody, "Modo", "AaMode", { "Estatico", "Jitter", "Oscilar", "Aleatorio" })
+    dropdown(tBody, "Direcao base do corpo", "AaBase", { "Atras", "Esquerda", "Direita", "Frente", "Personalizado" })
+    slider(tBody, "Angulo personalizado", "AaYaw", -180, 180, 1, " graus")
+    slider(tBody, "Alcance (jitter / oscilar / aleatorio)", "AaRange", 0, 180, 1, " graus")
+    slider(tBody, "Frequencia (jitter / aleatorio)", "AaRate", 0.5, 60, 0.5, " Hz")
+    slider(tBody, "Velocidade da oscilacao", "AaSweep", 0.1, 10, 0.1, " Hz")
+    toggle(tBody, "Direcao relativa a camera (desligado = fixa no mundo)", "AaFollowCam")
+    dropdown(tBody, "Inclinacao (pitch, experimental)", "AaPitch", { "Nenhum", "Cima", "Baixo", "Jitter", "Aleatorio" })
+    slider(tBody, "Intensidade da inclinacao", "AaPitchAmt", 0, 90, 1, " graus")
+    slider(tBody, "Roll fixo (experimental)", "AaRoll", -90, 90, 1, " graus")
+    dropdown(tBody, "Quando aplicar", "AaWhen", { "Sempre", "Somente parado", "Somente movendo" })
+    toggle(tBody, "Pausar enquanto atiro (botao esquerdo)", "AaPauseShoot")
+    local bodyLbl = tBody:CreateLabel("Estado: desligado")
+    tBody:CreateLabel("Com os dois ligados, o spin soma por cima do anti-aim. Se o jogo girar o personagem pelo servidor, o efeito pode nao aparecer: rode o Diagnostico.")
+    task.spawn(function()
+        while not C.Dead and gen == GEN do
+            pcall(function() bodyLbl:Set(T("Estado: ") .. T(BD.state)) end)
+            task.wait(0.5)
+        end
+    end)
+
+    tBody:CreateSection("Auto agachar")
+    tBody:CreateLabel("O jogo agacha enquanto a tecla esta segurada; o script segura/solta a tecla virtual conforme o modo. O jogo limita agachar em sequencia (spam), por isso o intervalo minimo do modo spam e 250 ms.")
+    toggle(tBody, "Ativar auto agachar", "AcOn", function(v)
+        if not v then post(function() pcall(acStep) end) end
+    end)
+    dropdown(tBody, "Modo de agachar", "AcMode", { "Sempre agachado", "Agachar ao atirar", "Agachar parado", "Com anti-aim", "Spam (alternar)" })
+    dropdown(tBody, "Tecla de agachar do jogo", "AcKey", { "LeftControl", "C", "X", "LeftAlt", "LeftShift" })
+    slider(tBody, "Intervalo do spam", "AcInterval", 250, 2000, 50, " ms")
+    local acLbl = tBody:CreateLabel("Auto agachar: desligado")
+    task.spawn(function()
+        while not C.Dead and gen == GEN do
+            pcall(function() acLbl:Set(T("Auto agachar: ") .. T(AC.state)) end)
+            task.wait(0.5)
+        end
+    end)
+
+    -- ============ Arma ============
+    local tGun = newTab("Arma")
+    tGun:CreateSection("Recuo e espalhamento (patch no GunConfig, so no seu cliente)")
+    local function gunToggle(v)
+        if v and not GCM.installed then
+            local ok, err = installGunConfig()
+            if not ok then
+                C.NoRecoil, C.NoSpread = false, false
+                notifyT({ Title = "Arma", Content = tostring(err), Duration = 6 })
+                return
+            end
+        end
+        repatchAll()
+    end
+    toggle(tGun, "No Recoil (sem recuo)", "NoRecoil", gunToggle)
+    toggle(tGun, "No Spread (sem espalhamento)", "NoSpread", gunToggle)
+    tGun:CreateLabel("Se o recuo visual persistir, rode o Diagnostico e me mande o log (WeaponModule nao foi lido).")
+    tGun:CreateSection("Cadencia de tiro (Rate do GunConfig)")
+    toggle(tGun, "Alterar cadencia de tiro", "FireRateOn", gunToggle)
+    slider(tGun, "Multiplicador da cadencia", "FireRateMul", 0.5, 10, 0.05, "x", function() repatchAll() end)
+    tGun:CreateLabel("O servidor limita a cadencia (RateSlack 0.85 e rajada de 3 tiros em 0.25 s). Acima de ~1.15x o cliente atira mais rapido mas o servidor pode ignorar os tiros extras.")
+
+    -- ============ Visuais ============
+    local tVis = newTab("Visuais")
+    tVis:CreateSection("Smoke")
+    toggle(tVis, "Remover smoke", "NoSmoke", function(v)
+        if v then scanSmoke() else restoreSmoke() end
+    end)
+    toggle(tVis, "Incluir paredes de habilidade (BlocksSight)", "NoSmokeWalls", function()
+        if C.NoSmoke then scanSmoke() end
+    end)
+    tVis:CreateSection("Efeitos de tela")
+    toggle(tVis, "Remover flash (cegueira)", "NoFlash", function(v)
+        if v then scanEffects() end
+    end)
+    toggle(tVis, "Remover blur / desfoque", "NoBlur", function(v)
+        if v then scanEffects() else restoreEffects() scanEffects() end
+    end)
+    toggle(tVis, "Remover color correction / bloom / sunrays", "NoColor", function(v)
+        if v then scanEffects() else restoreEffects() scanEffects() end
+    end)
+
+    -- ============ Config ============
+    local tCfg = newTab("Config")
+    tCfg:CreateSection("Perfis de configuracao")
+    if not fsOk then
+        tCfg:CreateLabel("Seu executor nao tem writefile/readfile/listfiles: salvar em arquivo indisponivel. Use Exportar/Importar pela area de transferencia.")
+    end
+    tCfg:CreateInput({
+        Name = "Nome do perfil", PlaceholderText = "padrao", RemoveTextAfterFocusLost = false,
+        Callback = function(txt) if txt and txt ~= "" then CFG.name = txt end end,
+    })
+    local cfgDrop = tCfg:CreateDropdown({
+        Name = "Perfis salvos", Options = { "(nenhum)" }, CurrentOption = { "(nenhum)" }, MultipleOptions = false,
+        Flag = "vh_cfgsel",
+        Callback = function(o)
+            local v = pick(o)
+            if v and v ~= "(nenhum)" then CFG.sel = v CFG.name = v end
+        end,
+    })
+    local function cfgRefresh()
+        CFG.list = cfgList()
+        local opts = #CFG.list > 0 and CFG.list or { "(nenhum)" }
+        pcall(function() cfgDrop:Refresh(opts) end)
+    end
+    local function note(t, c) notifyT({ Title = "Config", Content = c, Duration = 4 }) end
+    tCfg:CreateButton({
+        Name = "Salvar perfil (com o nome acima)",
+        Callback = function()
+            if not cfgEnsure() then note("", "Sem acesso a arquivos neste executor") return end
+            local ok, err = pcall(writefile, cfgPath(CFG.name), cfgEncode())
+            if ok then note("", T("Salvo: ") .. CFG.name) else note("", T("Falha ao salvar: ") .. tostring(err)) end
+            cfgRefresh()
+        end,
+    })
+    tCfg:CreateButton({
+        Name = "Carregar perfil selecionado",
+        Callback = function()
+            local n = CFG.sel or CFG.name
+            if not fsOk or not isfile(cfgPath(n)) then note("", T("Perfil nao encontrado: ") .. tostring(n)) return end
+            local ok, data = pcall(readfile, cfgPath(n))
+            if not ok then note("", "Falha ao ler") return end
+            local good, cnt = cfgApply(data)
+            note("", good and (T("Carregado: ") .. n .. " (" .. cnt .. T(" opcoes)")) or tostring(cnt))
+        end,
+    })
+    tCfg:CreateButton({
+        Name = "Excluir perfil selecionado",
+        Callback = function()
+            local n = CFG.sel
+            if not n or not fsOk or not isfile(cfgPath(n)) then note("", "Selecione um perfil") return end
+            if delfile then pcall(delfile, cfgPath(n)) note("", T("Excluido: ") .. n) else note("", "Executor sem delfile") end
+            CFG.sel = nil
+            cfgRefresh()
+        end,
+    })
+    tCfg:CreateButton({ Name = "Atualizar lista", Callback = cfgRefresh })
+    tCfg:CreateSection("Iniciar com perfil")
+    tCfg:CreateButton({
+        Name = "Carregar o perfil selecionado automaticamente ao executar",
+        Callback = function()
+            local n = CFG.sel or CFG.name
+            if not cfgEnsure() then note("", "Sem acesso a arquivos") return end
+            pcall(writefile, CFG_DIR .. "/_autoload.txt", tostring(n))
+            note("", T("Auto-carregar: ") .. tostring(n))
+        end,
+    })
+    tCfg:CreateButton({
+        Name = "Desligar auto-carregar",
+        Callback = function()
+            if fsOk and isfile(CFG_DIR .. "/_autoload.txt") and delfile then pcall(delfile, CFG_DIR .. "/_autoload.txt") end
+            note("", "Auto-carregar desligado")
+        end,
+    })
+    tCfg:CreateSection("Area de transferencia")
+    tCfg:CreateButton({
+        Name = "Exportar configuracao atual (copiar JSON)",
+        Callback = function()
+            if setclipboard then pcall(setclipboard, cfgEncode()) note("", "JSON copiado") else note("", "Executor sem setclipboard") end
+        end,
+    })
+    tCfg:CreateInput({
+        Name = "Importar (cole o JSON e tecle Enter)", PlaceholderText = "{...}", RemoveTextAfterFocusLost = true,
+        Callback = function(txt)
+            if not txt or txt == "" then return end
+            local good, cnt = cfgApply(txt)
+            note("", good and (T("Importado (") .. cnt .. T(" opcoes)")) or tostring(cnt))
+        end,
+    })
+    cfgRefresh()
+
+    -- ============ Diagnostico ============
+    local tDiag = newTab("Diagnostico")
+    tDiag:CreateSection("Verificacao dos caminhos do jogo")
+    tDiag:CreateButton({
+        Name = "Rodar diagnostico (copia o relatorio)",
+        Callback = function()
+            local L = {}
+            local function add(s) L[#L + 1] = s end
+            add("Click: mouse1click=" .. tostring(mouse1click ~= nil) .. " mouse1press=" .. tostring(mouse1press ~= nil))
+            local gcfg = gunCfg()
+            add("Arma atual: " .. tostring(weaponOf(LP)) .. " Rate=" .. tostring(gcfg and gcfg.Rate))
+            add("hookfunction=" .. tostring(hookfunction ~= nil) .. " hookmetamethod=" .. tostring(hookmetamethod ~= nil)
+                .. " mousemoverel=" .. tostring(mousemoverel ~= nil) .. " gethui=" .. tostring(gethui ~= nil))
+            add("Eu: team=" .. tostring(teamOf(LP)) .. " armor=" .. tostring(childVal(LP, "Armor"))
+                .. " equipped=" .. tostring(childVal(LP:FindFirstChild("Status"), "Equipped")))
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LP then
+                    local char = p.Character
+                    local names = {}
+                    if char then
+                        for _, n in ipairs({ "Head", "HeadHB", "HumanoidRootPart", "UpperTorso", "Torso", "Humanoid" }) do
+                            names[#names + 1] = n .. "=" .. tostring(char:FindFirstChild(n) ~= nil)
+                        end
+                    end
+                    add(string.format("%s: team=%s alive=%s agent=%s armor=%s weapon=%s loadout=%s char=%s [%s]",
+                        p.Name, tostring(teamOf(p)), tostring(aliveOf(p)), agentOf(p),
+                        tostring(childVal(p, "Armor")), weaponOf(p), loadoutOf(p), tostring(char ~= nil), table.concat(names, " ")))
+                    local st = p:FindFirstChild("Status")
+                    if st then
+                        local kids = {}
+                        for _, k in ipairs(st:GetChildren()) do kids[#kids + 1] = k.Name end
+                        add("   Status: " .. table.concat(kids, ", "))
+                    end
+                    local pk = {}
+                    for _, k in ipairs(p:GetChildren()) do pk[#pk + 1] = k.Name end
+                    add("   Player filhos: " .. table.concat(pk, ", "))
+                end
+            end
+            for m, e in pairs(BOTS) do
+                local at = {}
+                for k, v in pairs(m:GetAttributes()) do at[#at + 1] = k .. "=" .. tostring(v) end
+                add(string.format("BOT %s: enemy=%s hp=%s attrs[%s]", e.Name, tostring(isEnemy(e)),
+                    tostring(m:FindFirstChildOfClass("Humanoid") and m:FindFirstChildOfClass("Humanoid").Health), table.concat(at, ", ")))
+            end
+            add(("Auto Shoot: remote=%s ammo=%s intervalo=%.3f s | AutoJump=%s | VIM=%s keypress=%s"):format(
+                tostring(findShoot() ~= nil), tostring(ammoLeft()), fireInterval(), AJ.state, tostring(getVIM() and true or false), tostring(keypress ~= nil)))
+            add(("Movimento: Speed folder=%s | velocidade=%s | pente=%s"):format(
+                tostring(ReplicatedStorage:FindFirstChild("Speed") ~= nil), MV.state, tostring(ammoLeft())))
+            add(("Silent aim: ativo=%s | metodo=%s | trocas=%d | erros=%d | ultimo=%s | hooks=%s"):format(
+                tostring(SA.active), SA.method, SA.hits, SA.errs, SA.last,
+                (SA.hooked.Namecall and "namecall " or "") .. (SA.hooked.Hookfunction and "hookfunction" or "")))
+            add(("Executor: hookmetamethod=%s getnamecallmethod=%s checkcaller=%s newcclosure=%s setnamecallmethod=%s hookfunction=%s mousemoverel=%s mouse1click=%s keypress=%s"):format(
+                tostring(hasFn(hookmetamethod)), tostring(hasFn(getnamecallmethod)), tostring(hasFn(checkcaller)),
+                tostring(hasFn(newcclosure)), tostring(hasFn(setnamecallmethod)), tostring(hasFn(hookfunction)),
+                tostring(hasFn(mousemoverel)), tostring(hasFn(mouse1click)), tostring(hasFn(keypress))))
+            local txt = table.concat(L, "\n")
+            print("[VH diagnostico]\n" .. txt)
+            if setclipboard then pcall(setclipboard, txt) end
+            notifyT({ Title = "Diagnostico", Content = T("Relatorio no console (F9)") .. (setclipboard and T(" e na area de transferencia") or ""), Duration = 6 })
+        end,
+    })
+    tDiag:CreateButton({
+        Name = "Descarregar script (remove tudo)",
+        Callback = function() if env.VH_Unload then env.VH_Unload() end end,
+    })
+
+
+end
+
+rebuildMenu = function()
+    GEN = GEN + 1
+    pcall(function() Rayfield:Destroy() end)
+    local ok, lib = pcall(function() return loadstring(game:HttpGet("https://sirius.menu/rayfield"))() end)
+    if not ok or not lib then return end
+    Rayfield = lib
+    UI = {}
+    buildMenu()
+end
+
+--------------------------------------------------------------------------
+-- Unload
+--------------------------------------------------------------------------
+env.VH_Unload = function()
+    C.Dead = true
+    C.AimOn = false
+    C.AsOn = false
+    C.SilentOn = false
+    pcall(saDisable)
+    pcall(restoreMovement)
+    pcall(restoreMods)
+    pcall(restoreGunConfig)
+    C.ChamsOn = false
+    C.EspOn = false
+    pcall(function() RunService:UnbindFromRenderStep(BIND) end)
+    pcall(function() RunService:UnbindFromRenderStep("VH_CamRestore") end)
+    pcall(function() RunService:UnbindFromRenderStep("VH_CamApply") end)
+    for _, c in ipairs(Conns) do pcall(function() c:Disconnect() end) end
+    Conns = {}
+    for p in pairs(ESP) do destroyESP(p) end
+    pcall(restoreSmoke)
+    pcall(restoreEffects)
+    pcall(function() Overlay:Destroy() end)
+    pcall(function() Holder:Destroy() end)
+    pcall(function() Rayfield:Destroy() end)
+    env.VH_Unload = nil
+end
+
+
+-- inicio
+loadLang()
+Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+buildMenu()
+
+task.defer(function()
+    if fsOk and isfile(CFG_DIR .. "/_autoload.txt") then
+        local ok, n = pcall(readfile, CFG_DIR .. "/_autoload.txt")
+        if ok and n and isfile(cfgPath(n)) then
+            local ok2, data = pcall(readfile, cfgPath(n))
+            if ok2 then cfgApply(data) end
+        end
+    end
+end)
+
+notifyT({
+    Title = "Vantage Memesense",
+    Content = "Carregado. Menu: RightShift. Rode o Diagnostico na partida.",
+    Duration = 6,
+})
