@@ -40,7 +40,7 @@ local C = {
     EspOn = false, EspAllies = false, EspMaxDist = 1000,
     EspBox = true, EspBoxColor = Color3.fromRGB(255, 70, 70), EspAllyColor = Color3.fromRGB(70, 160, 255),
     EspBoxThick = 1.5, EspVisColor = false, EspVisColorVis = Color3.fromRGB(80, 255, 120),
-    EspName = true, EspAgent = true, EspSpike = true, EspWeapon = true, EspLoadout = false,
+    EspName = true, EspAgent = true, EspWeapon = true, EspLoadout = false,
     EspShield = true, EspHealthText = true, EspDist = true,
     EspHealthBar = true, EspShieldBar = true, ShieldMax = 50,
     EspTextSize = 13, EspTextColor = Color3.fromRGB(255, 255, 255),
@@ -91,8 +91,13 @@ local C = {
     Lang = "Portugues",
 
     -- Velocidade agachado, agachar sem delay, recarga, cabeca, equipar instantaneo
-    CrSpeedOn = false, CrSpeedVal = 10, CrouchFast = false,
-    IrOn = false, ArOn = false,
+    CrSpeedOn = false, CrSpeedVal = 10,
+    ArOn = false,
+    IceWallBlocks = true,
+    -- Spike (Workspace.Geometry.Debris.SPIKE)
+    SpikeChams = false, SpikeChamsFill = Color3.fromRGB(255, 210, 60), SpikeChamsOut = Color3.fromRGB(255, 255, 255),
+    SpikeChamsFillT = 0.4, SpikeChamsWalls = true,
+    SpikeEsp = false, SpikeEspColor = Color3.fromRGB(255, 210, 60), SpikeEspSize = 14,
     HeadOn = false, HeadMode = "Aleatorio", HeadRate = 10, HeadRange = 100,
     EqOn = false,
 
@@ -276,23 +281,45 @@ local function rebuildIgnore(withSmoke)
     local c = cam()
     if c then list[#list + 1] = c end
     local geo = workspace:FindFirstChild("Geometry")
+    local proj = geo and geo:FindFirstChild("Projectiles") or nil
     if geo then
-        for _, n in ipairs({ "Debris", "Ray_Ignore", "DroppedItems", "Projectiles" }) do
+        for _, n in ipairs({ "Debris", "Ray_Ignore", "DroppedItems" }) do
             local f = geo:FindFirstChild(n)
             if f then list[#list + 1] = f end
+        end
+    end
+    -- Projectiles: ignora tudo, menos a parede de gelo (IceWall), que passa a bloquear o wall check
+    if proj then
+        if C.IceWallBlocks then
+            for _, ch in ipairs(proj:GetChildren()) do
+                if not string.find(string.lower(ch.Name), "icewall", 1, true) then list[#list + 1] = ch end
+            end
+        else
+            list[#list + 1] = proj
         end
     end
     if withSmoke then
         for _, t in ipairs(CollectionService:GetTagged("VisionSmoke")) do list[#list + 1] = t end
     end
-    return list
+    return list, proj
+end
+
+-- "ice" = parte da parede de gelo, "proj" = outro projetil/efeito em Projectiles, nil = resto do mapa
+local function projKind(inst, proj)
+    if not proj or not inst:IsDescendantOf(proj) then return nil end
+    local x = inst
+    while x and x ~= proj do
+        if string.find(string.lower(x.Name), "icewall", 1, true) then return "ice" end
+        x = x.Parent
+    end
+    return "proj"
 end
 
 local function isVisible(origin, part, char, withSmoke)
     local now = os.clock()
     local entry = ignoreCache[withSmoke and true or false]
     if now - entry.t > 0.5 then
-        entry.list = rebuildIgnore(withSmoke)
+        entry.list, entry.proj = rebuildIgnore(withSmoke)
         entry.t = now
     end
     local ign = {}
@@ -307,13 +334,19 @@ local function isVisible(origin, part, char, withSmoke)
         if not res then return true end
         local inst = res.Instance
         if inst:IsDescendantOf(char) then return true end
-        local m = inst:FindFirstAncestorOfClass("Model")
-        if m and m ~= workspace and m:FindFirstChildOfClass("Humanoid") then
-            ign[#ign + 1] = m
-        elseif inst.Transparency >= 0.99 and not inst.CanCollide then
+        local pk = projKind(inst, entry.proj)
+        if pk == "ice" and C.IceWallBlocks then return false end
+        if pk then
             ign[#ign + 1] = inst
         else
-            return false
+            local m = inst:FindFirstAncestorOfClass("Model")
+            if m and m ~= workspace and m:FindFirstChildOfClass("Humanoid") then
+                ign[#ign + 1] = m
+            elseif inst.Transparency >= 0.99 and not inst.CanCollide then
+                ign[#ign + 1] = inst
+            else
+                return false
+            end
         end
     end
     return false
@@ -643,12 +676,6 @@ local function updateESP(o, now)
                 local a = agentOf(p)
                 if a ~= "" then top[#top + 1] = "[" .. a .. "]" end
             end
-            if C.EspSpike then
-                local hs
-                if isBotEnt(p) then hs = p.Model:GetAttribute("HasSpike")
-                else hs = p:GetAttribute("HasSpike") or childVal(p, "HasSpike") end
-                if hs == true then top[#top + 1] = '<font color="#ffd23c">[SPIKE]</font>' end
-            end
             if C.EspWeapon then
                 local w = weaponOf(p)
                 if not (isBotEnt(p) and w == "?") then bot[#bot + 1] = w end
@@ -684,7 +711,7 @@ local function updateESP(o, now)
         local onScreen = tp.Z > 0 and bp.Z > 0
         o.topText.Position = UDim2.fromOffset(tp.X, tp.Y - 2)
         o.botText.Position = UDim2.fromOffset(bp.X, bp.Y + 2)
-        o.topText.Visible = onScreen and (C.EspName or C.EspAgent or C.EspSpike) and o.topText.Text ~= ""
+        o.topText.Visible = onScreen and (C.EspName or C.EspAgent) and o.topText.Text ~= ""
         o.botText.Visible = onScreen and (C.EspWeapon or C.EspLoadout or C.EspShield or C.EspHealthText or C.EspDist) and o.botText.Text ~= ""
 
         -- tracer
@@ -1697,24 +1724,39 @@ function NX.wmod()
     eq.err = "require(WeaponModule) falhou: " .. tostring(m)
     return nil
 end
-function NX.eqTimes(on)
-    local eq = NX.eq
+-- Os valores de tempo (EquipTime/ReloadTime...) existem em WeaponEngine.Weapons E nas copias que o jogo
+-- cria ao equipar (ferramentas no personagem/mochila/camera), entao os dois lugares sao alterados.
+function NX.holders()
+    local out = {}
     local we = ReplicatedStorage:FindFirstChild("WeaponEngine")
     local ws = we and we:FindFirstChild("Weapons")
-    if not ws then return end
-    for _, w in ipairs(ws:GetChildren()) do
-        local v = w:FindFirstChild("EquipTime")
-        if v and (v:IsA("NumberValue") or v:IsA("IntValue")) then
-            if on then
-                if eq.saved[v] == nil then eq.saved[v] = v.Value end
-                if v.Value ~= 0.05 then v.Value = 0.05 end
-            elseif eq.saved[v] ~= nil then
-                v.Value = eq.saved[v]
+    if ws then for _, w in ipairs(ws:GetChildren()) do out[#out + 1] = w end end
+    local cm = workspace.CurrentCamera
+    for _, box in ipairs({ LP.Character, LP:FindFirstChild("Backpack"), cm, cm and cm:FindFirstChild("Arms") }) do
+        if box then
+            for _, c in ipairs(box:GetChildren()) do out[#out + 1] = c end
+            out[#out + 1] = box
+        end
+    end
+    return out
+end
+function NX.patchVals(names, on, saved)
+    for _, h in ipairs(NX.holders()) do
+        for _, n in ipairs(names) do
+            local v = h:FindFirstChild(n)
+            if v and (v:IsA("NumberValue") or v:IsA("IntValue")) then
+                if on then
+                    if saved[v] == nil then saved[v] = v.Value end
+                    if v.Value ~= 0.05 then v.Value = 0.05 end
+                elseif saved[v] ~= nil then
+                    v.Value = saved[v]
+                end
             end
         end
     end
-    if not on then eq.saved = {} end
+    if not on then for k in pairs(saved) do saved[k] = nil end end
 end
+function NX.eqTimes(on) NX.patchVals({ "EquipTime" }, on, NX.eq.saved) end
 function NX.eqStep()
     local eq = NX.eq
     if not C.EqOn then
@@ -1776,7 +1818,6 @@ function NX.gcApply()
                 end
             end
             set("CrouchMul", 1, C.CrSpeedOn)
-            set("CrouchSpamStep", 0, C.CrouchFast)
         end
     end
     return true
@@ -1784,27 +1825,7 @@ end
 
 -- Recarga: instantanea (reduz ReloadTime no cliente e acelera as animacoes Reload*) e automatica
 -- (chama WeaponModule:reload(), o mesmo que a tecla de recarregar, quando o pente zera).
-NX.rl = { saved = {}, t = 0, last = 0, skipped = 0, auto = 0, state = "desligado", err = "" }
-function NX.rlTimes(on)
-    local rl = NX.rl
-    local we = ReplicatedStorage:FindFirstChild("WeaponEngine")
-    local ws = we and we:FindFirstChild("Weapons")
-    if not ws then return end
-    for _, w in ipairs(ws:GetChildren()) do
-        for _, n in ipairs({ "ReloadTime", "SReload", "EReload" }) do
-            local v = w:FindFirstChild(n)
-            if v and (v:IsA("NumberValue") or v:IsA("IntValue")) then
-                if on then
-                    if rl.saved[v] == nil then rl.saved[v] = v.Value end
-                    if v.Value ~= 0.05 then v.Value = 0.05 end
-                elseif rl.saved[v] ~= nil then
-                    v.Value = rl.saved[v]
-                end
-            end
-        end
-    end
-    if not on then rl.saved = {} end
-end
+NX.rl = { boost = {}, saved = {}, t = 0, last = 0, skipped = 0, auto = 0, state = "desligado", err = "" }
 function NX.reloading()
     local rl = NX.rl
     if not rl.vars or not rl.vars.Parent then
@@ -1816,37 +1837,11 @@ function NX.reloading()
 end
 function NX.reloadStep()
     local rl = NX.rl
-    if not C.IrOn and not C.ArOn then
-        if next(rl.saved) ~= nil then pcall(NX.rlTimes, false) end
-        rl.state = "desligado"
-        return
-    end
+    if not C.ArOn then rl.state = "desligado" return end
     local now = os.clock()
-    if C.IrOn and now - rl.t > 1 then
-        rl.t = now
-        pcall(NX.rlTimes, true)
-    elseif not C.IrOn and next(rl.saved) ~= nil then
-        pcall(NX.rlTimes, false)
-    end
     local wm = NX.wmod()
     if not wm then rl.state = "sem WeaponModule" return end
     rl.state = "ativo"
-    if C.IrOn then
-        local ok, anims = pcall(function() return wm.Animations.FirstPersonAnimations end)
-        if ok and type(anims) == "table" then
-            for k, tr in pairs(anims) do
-                if type(k) == "string" and k:sub(1, 6) == "Reload" then
-                    pcall(function()
-                        if tr.IsPlaying then
-                            tr:AdjustSpeed(100)
-                            if tr.Length > 0 then tr.TimePosition = tr.Length end
-                            rl.skipped = rl.skipped + 1
-                        end
-                    end)
-                end
-            end
-        end
-    end
     if C.ArOn and now - rl.last > 0.6 and aliveOf(LP) then
         local w = weaponOf(LP)
         local inv = LP:FindFirstChild("Inventory")
@@ -1868,6 +1863,136 @@ function NX.reloadStep()
             end
         end
     end
+end
+
+-- Spike: Workspace.Geometry.Debris.SPIKE (Model com Handle; atributos Site, PlantedAt, DetonateAt em
+-- tempo de servidor). Chams = Highlight; ESP = texto no Overlay com as infos do proprio spike.
+NX.sp = { m = nil, t = -10, hl = nil, lbl = nil, state = "desligado" }
+function NX.spFind()
+    local sp = NX.sp
+    if sp.m and sp.m.Parent then return sp.m end
+    local now = os.clock()
+    if now - sp.t < 0.5 then return nil end
+    sp.t = now
+    local g = workspace:FindFirstChild("Geometry")
+    local d = g and g:FindFirstChild("Debris")
+    sp.m = d and d:FindFirstChild("SPIKE") or nil
+    return sp.m
+end
+function NX.spPart(m)
+    if m:IsA("BasePart") then return m end
+    return m.PrimaryPart or m:FindFirstChild("Handle") or m:FindFirstChildWhichIsA("BasePart", true)
+end
+function NX.spHide()
+    local sp = NX.sp
+    if sp.hl then sp.hl.Enabled = false end
+    if sp.lbl then sp.lbl.Visible = false end
+end
+function NX.spikeUpdate()
+    local sp = NX.sp
+    if C.Dead or not (C.SpikeChams or C.SpikeEsp) then
+        sp.state = "desligado"
+        NX.spHide()
+        return
+    end
+    if not sp.hl then
+        sp.hl = Instance.new("Highlight")
+        sp.hl.Name = "VH_spike_hl"
+        sp.hl.Enabled = false
+        sp.hl.Parent = Holder
+    end
+    if not sp.lbl then
+        local t = Instance.new("TextLabel")
+        t.Name = "VH_spike_txt"
+        t.BackgroundTransparency = 1
+        t.AnchorPoint = Vector2.new(0.5, 1)
+        t.Size = UDim2.new(0, 280, 0, 90)
+        t.RichText = true
+        t.Font = Enum.Font.GothamBold
+        t.TextColor3 = Color3.new(1, 1, 1)
+        t.TextStrokeTransparency = 0.3
+        t.TextYAlignment = Enum.TextYAlignment.Bottom
+        t.Text = ""
+        t.Visible = false
+        t.ZIndex = 6
+        t.Parent = Overlay
+        sp.lbl = t
+    end
+    local m = NX.spFind()
+    if not m then sp.state = "sem spike" NX.spHide() return end
+    sp.state = "ativo"
+    if C.SpikeChams then
+        sp.hl.Adornee = m
+        sp.hl.FillColor = C.SpikeChamsFill
+        sp.hl.OutlineColor = C.SpikeChamsOut
+        sp.hl.FillTransparency = C.SpikeChamsFillT
+        sp.hl.OutlineTransparency = 0
+        sp.hl.DepthMode = C.SpikeChamsWalls and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
+        sp.hl.Enabled = true
+    else
+        sp.hl.Enabled = false
+    end
+    local c = cam()
+    local part = NX.spPart(m)
+    if not (C.SpikeEsp and c and part) then sp.lbl.Visible = false return end
+    local wp, on = c:WorldToViewportPoint(part.Position + Vector3.new(0, 1.6, 0))
+    if not on or wp.Z <= 0 then sp.lbl.Visible = false return end
+    local dist = (part.Position - c.CFrame.Position).Magnitude / STUDS_PER_METER
+    local lines = {}
+    local site = m:GetAttribute("Site")
+    local planted = m:GetAttribute("PlantedAt")
+    local det = m:GetAttribute("DetonateAt")
+    local col = C.SpikeEspColor
+    local head = "SPIKE"
+    if site ~= nil then head = head .. " [" .. tostring(site) .. "]" end
+    if type(planted) ~= "number" then head = head .. " (solto)" end
+    lines[#lines + 1] = head
+    if type(det) == "number" then
+        local left = det - workspace:GetServerTimeNow()
+        if left > 0 then
+            lines[#lines + 1] = string.format("Explode em %.1fs", left)
+            if left <= 10 then col = Color3.fromRGB(255, 70, 70) end
+        else
+            lines[#lines + 1] = "Detonado"
+        end
+    end
+    lines[#lines + 1] = string.format("%.0fm", dist)
+    if type(planted) == "number" and type(det) == "number" then
+        local handle = m:FindFirstChild("Handle")
+        local dv = handle and handle:FindFirstChild("Defused")
+        local left = det - workspace:GetServerTimeNow()
+        if dv and dv.Value == true then
+            lines[#lines + 1] = "Defusado"
+        elseif left > 0 then
+            local base = 0
+            local wm = NX.eq and NX.eq.wm
+            if wm then pcall(function() base = tonumber(wm.DefuseBase) or 0 end) end
+            if left < 7 * (1 - math.clamp(base, 0, 1)) then
+                lines[#lines + 1] = "NAO E POSSIVEL DEFUSAR"
+                col = Color3.fromRGB(255, 70, 70)
+            end
+        end
+    end
+    local extra = 0
+    for k, v in pairs(m:GetAttributes()) do
+        if k ~= "Site" and k ~= "PlantedAt" and k ~= "DetonateAt" and extra < 4 then
+            local tv = type(v)
+            if tv == "string" or tv == "number" or tv == "boolean" then
+                lines[#lines + 1] = tostring(k) .. ": " .. tostring(v)
+                extra = extra + 1
+            end
+        end
+    end
+    sp.lbl.TextSize = C.SpikeEspSize
+    sp.lbl.TextColor3 = col
+    sp.lbl.Text = table.concat(lines, "\n")
+    sp.lbl.Position = UDim2.fromOffset(wp.X, wp.Y)
+    sp.lbl.Visible = true
+end
+function NX.spikeClean()
+    local sp = NX.sp
+    if sp.hl then sp.hl:Destroy() sp.hl = nil end
+    if sp.lbl then sp.lbl:Destroy() sp.lbl = nil end
 end
 
 -- Killfeed e nomes (placar). Os textos sao trocados no seu cliente; so voce ve.
@@ -1992,7 +2117,7 @@ function NX.step()
     end
 end
 function NX.restore()
-    C.HeadOn, C.EqOn, C.IrOn, C.ArOn, C.CrSpeedOn, C.CrouchFast = false, false, false, false, false, false
+    C.HeadOn, C.EqOn, C.ArOn, C.CrSpeedOn = false, false, false, false
     pcall(NX.gcApply)
     pcall(mvApply)
     C.KfMode, C.SbMode = "Normal", "Normal"
@@ -2001,6 +2126,9 @@ function NX.restore()
     pcall(NX.reloadStep)
     pcall(NX.nameStep)
     pcall(NX.scan)
+    C.SpikeChams, C.SpikeEsp = false, false
+    pcall(NX.spikeUpdate)
+    pcall(NX.spikeClean)
 end
 conn(RunService.Heartbeat, function() pcall(NX.step) end)
 
@@ -2158,6 +2286,7 @@ RunService:BindToRenderStep(BIND, Enum.RenderPriority.Camera.Value + 1, function
     circleUpdate(asCircle, asStroke, C.AsOn and C.AsShowFov and C.AsMode ~= "360", C.AsFov, C.AsFovColor, C.AsFovOrigin)
     pcall(aimStep)
     pcall(asStep)
+    pcall(NX.spikeUpdate)
 end)
 
 --------------------------------------------------------------------------
@@ -2194,10 +2323,27 @@ local EN = {
     ["alvo travado"] = "target locked",
     ["nenhum"] = "none",
     ["Auto agachar"] = "Auto crouch",
+    ["Parede de gelo bloqueia o wall check (nao mira/atira atras dela)"] = "Ice wall blocks the wall check (no aiming/shooting behind it)",
+    ["NAO E POSSIVEL DEFUSAR"] = "CANNOT DEFUSE",
+    ["Chams do spike (Workspace.Geometry.Debris.SPIKE)"] = "Spike chams (Workspace.Geometry.Debris.SPIKE)",
+    ["ESP do spike (Workspace.Geometry.Debris.SPIKE)"] = "Spike ESP (Workspace.Geometry.Debris.SPIKE)",
+    ["Spike (Workspace.Geometry.Debris.SPIKE)"] = "Spike (Workspace.Geometry.Debris.SPIKE)",
+    ["Chams do spike"] = "Spike chams",
+    ["Cor do spike (preenchimento)"] = "Spike color (fill)",
+    ["Cor do spike (contorno)"] = "Spike color (outline)",
+    ["Transparencia do chams do spike"] = "Spike chams transparency",
+    ["Chams do spike atraves das paredes"] = "Spike chams through walls",
+    ["ESP do spike (infos em cima do spike)"] = "Spike ESP (info above the spike)",
+    ["Cor do texto do spike"] = "Spike text color",
+    ["Tamanho do texto do spike"] = "Spike text size",
+    ["Spike: desligado"] = "Spike: off",
+    ["Spike: "] = "Spike: ",
+    ["sem spike"] = "no spike",
+    ["Recarga automatica"] = "Auto reload",
+    ["Quando o pente zera e ainda ha municao reserva, usa o mesmo comando da tecla de recarregar."] = "When the magazine hits zero and there is reserve ammo, uses the same command as the reload key.",
     ["Velocidade agachado (valor proprio)"] = "Crouch speed (own value)",
     ["Velocidade agachado (studs/s)"] = "Crouch speed (studs/s)",
     ["Agachado, o jogo multiplica a velocidade por um fator proprio (CrouchMul). Com este toggle o fator vira 1 e a velocidade agachado e exatamente o valor acima, mesmo com a velocidade normal desligada."] = "While crouched the game multiplies speed by its own factor (CrouchMul). With this toggle the factor becomes 1 and the crouch speed is exactly the value above, even with normal speed off.",
-    ["Agachar sem delay (sem limite de spam)"] = "Crouch without delay (no spam limit)",
     ["Recarga"] = "Reload",
     ["Recarga instantanea reduz o tempo de recarga no cliente e pula as animacoes de recarga; recarga automatica usa o mesmo comando da tecla de recarregar quando o pente zera. Se o servidor tiver um tempo proprio de recarga, ele ainda vale."] = "Instant reload lowers reload time on the client and skips reload animations; auto reload uses the same command as the reload key when the magazine hits zero. If the server has its own reload timer it still applies.",
     ["Recarga instantanea"] = "Instant reload",
@@ -2297,7 +2443,6 @@ local EN = {
     ["Agente"] = "Agent",
     ["Arma equipada"] = "Equipped weapon",
     ["Loadout (Primary / Secondary / Knife)"] = "Loadout (Primary / Secondary / Knife)",
-    ["Mostrar quem carrega o SPIKE"] = "Show who carries the SPIKE",
     ["Escudo (tem ou nao + valor)"] = "Shield (yes/no + value)",
     ["Vida (numero)"] = "Health (number)",
     ["Distancia"] = "Distance",
@@ -2693,7 +2838,7 @@ local FEATURE_NAME = {
     NoRecoil = "No Recoil", NoSpread = "No Spread", FireRateOn = "Alterar cadencia de tiro",
     SpeedOn = "Alterar velocidade de movimento", AcOn = "Auto agachar", AutoJump = "Auto pular",
     TpOn = "Terceira pessoa", FovOn = "Alterar FOV",
-    CrSpeedOn = "Velocidade agachado", CrouchFast = "Agachar sem delay", IrOn = "Recarga instantanea", ArOn = "Recarga automatica", HeadOn = "Cabeca aleatoria", EqOn = "Equipar instantaneo",
+    CrSpeedOn = "Velocidade agachado", ArOn = "Recarga automatica", HeadOn = "Cabeca aleatoria", EqOn = "Equipar instantaneo", SpikeChams = "Chams do spike", SpikeEsp = "ESP do spike",
 }
 
 local function hasFn(f) return type(f) == "function" end
@@ -2773,7 +2918,6 @@ REQ.TpOn = function()
     return { "Workspace.CurrentCamera" }
 end
 REQ.FovOn = REQ.TpOn
-REQ.IrOn = function() return REQ.EqOn() end
 REQ.ArOn = function() return REQ.EqOn() end
 REQ.HeadOn = function()
     local ev = ReplicatedStorage:FindFirstChild("Events")
@@ -2782,10 +2926,6 @@ REQ.HeadOn = function()
 end
 REQ.CrSpeedOn = function()
     if not ReplicatedStorage:FindFirstChild("Speed") then return { "ReplicatedStorage.Speed (entre numa partida)" } end
-    if not NX.gcMod() then return { "ReplicatedStorage.Modules.GunConfig (require)" } end
-    return {}
-end
-REQ.CrouchFast = function()
     if not NX.gcMod() then return { "ReplicatedStorage.Modules.GunConfig (require)" } end
     return {}
 end
@@ -2935,6 +3075,7 @@ local function buildMenu()
     tGen:CreateSection("Alvos (valem para Chams, ESP, Aimbot e Auto Shoot)")
     toggle(tGen, "Incluir jogadores", "IncludePlayers")
     toggle(tGen, "Incluir bots (Workspace.DeathmatchBots)", "IncludeBots")
+    toggle(tGen, "Parede de gelo bloqueia o wall check (nao mira/atira atras dela)", "IceWallBlocks")
     local botLbl = tGen:CreateLabel("Bots detectados: 0")
     task.spawn(function()
         while not C.Dead and gen == GEN do
@@ -2965,6 +3106,13 @@ local function buildMenu()
     color(tCh, "Cor quando visivel", "ChamsVisColor")
     color(tCh, "Cor quando escondido", "ChamsHidColor")
 
+    tCh:CreateSection("Chams do spike (Workspace.Geometry.Debris.SPIKE)")
+    toggle(tCh, "Chams do spike", "SpikeChams")
+    color(tCh, "Cor do spike (preenchimento)", "SpikeChamsFill")
+    color(tCh, "Cor do spike (contorno)", "SpikeChamsOut")
+    slider(tCh, "Transparencia do chams do spike", "SpikeChamsFillT", 0, 1, 0.05)
+    toggle(tCh, "Chams do spike atraves das paredes", "SpikeChamsWalls")
+
     -- ============ ESP ============
     local tEsp = newTab("ESP")
     tEsp:CreateSection("Geral")
@@ -2986,7 +3134,6 @@ local function buildMenu()
     toggle(tEsp, "Agente", "EspAgent")
     toggle(tEsp, "Arma equipada", "EspWeapon")
     toggle(tEsp, "Loadout (Primary / Secondary / Knife)", "EspLoadout")
-    toggle(tEsp, "Mostrar quem carrega o SPIKE", "EspSpike")
     toggle(tEsp, "Escudo (tem ou nao + valor)", "EspShield")
     toggle(tEsp, "Vida (numero)", "EspHealthText")
     toggle(tEsp, "Distancia", "EspDist")
@@ -2997,6 +3144,18 @@ local function buildMenu()
     dropdown(tEsp, "Origem da linha", "EspTracerFrom", { "Baixo", "Centro", "Cima" })
     slider(tEsp, "Espessura da linha", "EspTracerThick", 1, 5, 1)
     color(tEsp, "Cor da linha", "EspTracerColor")
+
+    tEsp:CreateSection("ESP do spike (Workspace.Geometry.Debris.SPIKE)")
+    toggle(tEsp, "ESP do spike (infos em cima do spike)", "SpikeEsp")
+    color(tEsp, "Cor do texto do spike", "SpikeEspColor")
+    slider(tEsp, "Tamanho do texto do spike", "SpikeEspSize", 8, 28, 1)
+    local spLbl = tEsp:CreateLabel("Spike: desligado")
+    task.spawn(function()
+        while not C.Dead and gen == GEN do
+            pcall(function() spLbl:Set(T("Spike: ") .. T(NX.sp.state)) end)
+            task.wait(0.5)
+        end
+    end)
 
     -- ============ Aimbot ============
     local tAim = newTab("Aimbot")
@@ -3102,7 +3261,6 @@ local function buildMenu()
     toggle(tBody, "Velocidade agachado (valor proprio)", "CrSpeedOn", modsRefresh)
     slider(tBody, "Velocidade agachado (studs/s)", "CrSpeedVal", 1, 300, 1, "", modsRefresh)
     tBody:CreateLabel("Agachado, o jogo multiplica a velocidade por um fator proprio (CrouchMul). Com este toggle o fator vira 1 e a velocidade agachado e exatamente o valor acima, mesmo com a velocidade normal desligada.")
-    toggle(tBody, "Agachar sem delay (sem limite de spam)", "CrouchFast", function() post(NX.gcApply) end)
     local spdLbl = tBody:CreateLabel("Velocidade original da arma atual: -")
     tBody:CreateSection("Auto pular (o jogo ja faz bhop segurando o pulo)")
     toggle(tBody, "Auto pular (segura o pulo por voce)", "AutoJump")
@@ -3173,16 +3331,15 @@ local function buildMenu()
 
     -- ============ Arma ============
     local tGun = newTab("Arma")
-    tGun:CreateSection("Recarga")
-    tGun:CreateLabel("Recarga instantanea reduz o tempo de recarga no cliente e pula as animacoes de recarga; recarga automatica usa o mesmo comando da tecla de recarregar quando o pente zera. Se o servidor tiver um tempo proprio de recarga, ele ainda vale.")
-    toggle(tGun, "Recarga instantanea", "IrOn")
+    tGun:CreateSection("Recarga automatica")
+    tGun:CreateLabel("Quando o pente zera e ainda ha municao reserva, usa o mesmo comando da tecla de recarregar.")
     toggle(tGun, "Recarga automatica (pente vazio)", "ArOn")
     local rlLbl = tGun:CreateLabel("Recarga: desligado")
     task.spawn(function()
         while not C.Dead and gen == GEN do
             pcall(function()
                 local rl = NX.rl
-                rlLbl:Set(T("Recarga: ") .. T(rl.state) .. T(" | animacoes puladas: ") .. rl.skipped .. T(" | auto: ") .. rl.auto .. T(" | ultimo erro: ") .. (rl.err ~= "" and T(rl.err) or "-"))
+                rlLbl:Set(T("Recarga: ") .. T(rl.state) .. T(" | auto: ") .. rl.auto .. T(" | ultimo erro: ") .. (rl.err ~= "" and T(rl.err) or "-"))
             end)
             task.wait(0.5)
         end
